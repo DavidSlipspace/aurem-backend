@@ -1,0 +1,23 @@
+{
+  "name": "aurem-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "sam build",
+    "deploy": "sam deploy --guided"
+},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "@types/pg": "^8.20.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.3"
+  }
+}
