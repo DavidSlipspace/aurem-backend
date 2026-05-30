@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "validate": "sam validate",
     "build": "sam build",
     "deploy": "sam deploy --guided"
 },

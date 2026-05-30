@@ -1,37 +1,59 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Slipspace backend - database migration only
+Description: Aurem backend - dev RDS database only
 
-Globals:
-  Function:
-    Runtime: nodejs22.x
-    Timeout: 30
-    MemorySize: 256
-    Architectures:
-      - x86_64
+Parameters:
+  DbName:
+    Type: String
+    Default: aurem_dev
+
+  DbUsername:
+    Type: String
+    Default: postgres
+
+  DbPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
 
 Resources:
-  DatabaseMigrationFunction:
-    Type: AWS::Serverless::Function
+  AppDatabase:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
     Properties:
-      FunctionName: slipspace-dev-db-migration
-      CodeUri: src/
-      Handler: db/migrate.handler
-      Environment:
-        Variables:
-          DB_HOST: ""
-          DB_PORT: "5432"
-          DB_NAME: "slipspace_dev"
-          DB_USER: ""
-          DB_PASSWORD: ""
-          DB_SSL: "true"
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        EntryPoints:
-          - db/migrate.ts
-        Minify: false
-        Target: es2022
-        Sourcemap: true
-        External:
-          - pg-native
+      DBInstanceIdentifier: aurem-dev-db
+      DBName: !Ref DbName
+      Engine: postgres
+      EngineVersion: "16.3"
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: 20
+      StorageType: gp3
+      MasterUsername: !Ref DbUsername
+      MasterUserPassword: !Ref DbPassword
+      PubliclyAccessible: true
+      BackupRetentionPeriod: 1
+      DeletionProtection: false
+      StorageEncrypted: true
+      Tags:
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: Database
+        - Key: Owner
+          Value: David
+
+Outputs:
+  DatabaseEndpoint:
+    Description: RDS database endpoint
+    Value: !GetAtt AppDatabase.Endpoint.Address
+
+  DatabaseName:
+    Description: Database name
+    Value: !Ref DbName
+
+  DatabasePort:
+    Description: Database port
+    Value: !GetAtt AppDatabase.Endpoint.Port
