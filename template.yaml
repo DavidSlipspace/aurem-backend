@@ -5,7 +5,7 @@ Description: Aurem backend - dev RDS database only
 Parameters:
   DbName:
     Type: String
-    Default: aurem_dev
+    Default: auremDev
 
   DbUsername:
     Type: String
