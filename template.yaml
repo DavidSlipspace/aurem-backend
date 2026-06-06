@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Aurem backend - default VPC, private RDS, Cognito, and SSM admin tunnel
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  SubnetIdA:
+    Type: AWS::EC2::Subnet::Id
+
+  SubnetIdB:
+    Type: AWS::EC2::Subnet::Id
+
+  DbName:
+    Type: String
+    Default: auremDev
+
+  DbUsername:
+    Type: String
+    Default: postgres
+
+  DbPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+
+Resources:
+  AdminInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Aurem dev admin tunnel security group
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: aurem-dev-admin-sg
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: AdminTunnel
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Aurem dev private database security group
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref AdminInstanceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: aurem-dev-db-sg
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: Database
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Aurem dev database subnet group
+      SubnetIds:
+        - !Ref SubnetIdA
+        - !Ref SubnetIdB
+      Tags:
+        - Key: Name
+          Value: aurem-dev-db-subnet-group
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: Database
+
+  AdminInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: aurem-dev-admin-instance-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: AdminTunnel
+
+  AdminInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: aurem-dev-admin-instance-profile
+      Roles:
+        - !Ref AdminInstanceRole
+
+  AdminInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      ImageId: ami-0c02fb55956c7d316
+      IamInstanceProfile: !Ref AdminInstanceProfile
+      SubnetId: !Ref SubnetIdA
+      SecurityGroupIds:
+        - !Ref AdminInstanceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: aurem-dev-admin-ssm-instance
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: AdminTunnel
+
+  AppDatabase:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: aurem-dev-db
+      DBName: !Ref DbName
+      Engine: postgres
+      EngineVersion: "16.3"
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: 20
+      StorageType: gp3
+      MasterUsername: !Ref DbUsername
+      MasterUserPassword: !Ref DbPassword
+      PubliclyAccessible: false
+      VPCSecurityGroups:
+        - !Ref DatabaseSecurityGroup
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      BackupRetentionPeriod: 1
+      DeletionProtection: false
+      StorageEncrypted: true
+      Tags:
+        - Key: Name
+          Value: aurem-dev-db
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: Database
+        - Key: Owner
+          Value: David
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: aurem-dev-user-pool
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+        - Name: name
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: aurem-dev-frontend-client
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+
+Outputs:
+  AdminInstanceId:
+    Description: EC2 instance ID used for SSM tunnel
+    Value: !Ref AdminInstance
+
+  DatabaseEndpoint:
+    Description: Private RDS database endpoint
+    Value: !GetAtt AppDatabase.Endpoint.Address
+
+  DatabaseName:
+    Description: Database name
+    Value: !Ref DbName
+
+  DatabasePort:
+    Description: Database port
+    Value: !GetAtt AppDatabase.Endpoint.Port
+
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
