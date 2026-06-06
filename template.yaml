@@ -31,7 +31,7 @@ Resources:
       StorageType: gp3
       MasterUsername: !Ref DbUsername
       MasterUserPassword: !Ref DbPassword
-      PubliclyAccessible: true
+      PubliclyAccessible: false
       BackupRetentionPeriod: 1
       DeletionProtection: false
       StorageEncrypted: true
