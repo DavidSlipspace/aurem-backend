@@ -235,7 +235,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref AuremApi
-            Path: /me
+            Path: /getUser
             Method: GET
     Metadata:
       BuildMethod: esbuild
