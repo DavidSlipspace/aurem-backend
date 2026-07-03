@@ -5,19 +5,17 @@ import { jsonResponse } from "../common/response";
 
 type CurrentUserRow = {
   id: string;
-  company_id: string;
+  company_id: string | null;
   role_name: string;
 };
 
 type CaseRow = {
   id: string;
   case_reference_id: string;
-  company_name: string;
-  gc_first_name: string;
-  gc_last_name: string;
-  ip_first_name: string;
-  ip_last_name: string;
-  budget: number;
+  case_manager_first_name: string;
+  case_manager_last_name: string;
+  ipcm_first_name: string | null;
+  ipcm_last_name: string | null;
   status: string;
 };
 
@@ -56,12 +54,12 @@ export async function handler(
     const params: string[] = [];
 
     if (currentUser.role_name === "admin") {
-      whereClause = "c.company_id = $1";
-      params.push(currentUser.company_id);
-    } else if (currentUser.role_name === "gc_case_manager") {
-      whereClause = "c.gc_user_id = $1";
+      whereClause = "cm.company_id = $1";
+      params.push(currentUser.company_id ?? "");
+    } else if (currentUser.role_name === "case_manager") {
+      whereClause = "c.case_manager_user_id = $1";
       params.push(currentUser.id);
-    } else if (currentUser.role_name === "ip_case_manager") {
+    } else if (currentUser.role_name === "ipcm") {
       whereClause = "c.ip_user_id = $1";
       params.push(currentUser.id);
     } else {
@@ -75,17 +73,14 @@ export async function handler(
       SELECT
         c.id,
         c.case_reference_id,
-        co.company_name,
-        gc.first_name AS gc_first_name,
-        gc.last_name AS gc_last_name,
-        ip.first_name AS ip_first_name,
-        ip.last_name AS ip_last_name,
-        c.budget,
+        cm.first_name AS case_manager_first_name,
+        cm.last_name AS case_manager_last_name,
+        ip.first_name AS ipcm_first_name,
+        ip.last_name AS ipcm_last_name,
         c.status
       FROM cases c
-      JOIN companies co ON co.id = c.company_id
-      JOIN users gc ON gc.id = c.gc_user_id
-      JOIN users ip ON ip.id = c.ip_user_id
+      JOIN users cm ON cm.id = c.case_manager_user_id
+      LEFT JOIN users ip ON ip.id = c.ip_user_id
       WHERE ${whereClause}
       ORDER BY c.created_at DESC;
       `,
@@ -96,10 +91,11 @@ export async function handler(
       cases: casesResult.rows.map((row) => ({
         id: row.id,
         caseReferenceId: row.case_reference_id,
-        companyName: row.company_name,
-        gcName: `${row.gc_first_name} ${row.gc_last_name}`,
-        ipName: `${row.ip_first_name} ${row.ip_last_name}`,
-        budget: row.budget,
+        caseManagerName: `${row.case_manager_first_name} ${row.case_manager_last_name}`,
+        ipcmName:
+          row.ipcm_first_name && row.ipcm_last_name
+            ? `${row.ipcm_first_name} ${row.ipcm_last_name}`
+            : "Unassigned",
         status: row.status
       }))
     });
