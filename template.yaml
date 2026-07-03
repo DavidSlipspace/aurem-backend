@@ -199,9 +199,10 @@ Resources:
       Cors:
         AllowMethods: "'GET,OPTIONS'"
         AllowHeaders: "'Authorization,Content-Type'"
-        AllowOrigin: "'*'"
+        AllowOrigin: "'http://localhost:5173'"
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt UserPool.Arn
