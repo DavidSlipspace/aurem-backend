@@ -197,7 +197,7 @@ Resources:
       Name: aurem-dev-api
       StageName: dev
       Cors:
-        AllowMethods: "'GET,OPTIONS'"
+        AllowMethods: "'GET,POST,PUT,OPTIONS'"
         AllowHeaders: "'Authorization,Content-Type'"
         AllowOrigin: "'http://localhost:5173'"
       Auth:
@@ -285,6 +285,132 @@ Resources:
       BuildProperties:
         EntryPoints:
           - src/handlers/getCases.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  GetGcProfilesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-get-gc-profiles
+      CodeUri: .
+      Handler: src/handlers/getGcProfiles.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref AdminInstanceSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        GetGcProfiles:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /gc-profiles
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/getGcProfiles.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  CreateGcProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-create-gc-profile
+      CodeUri: .
+      Handler: src/handlers/createGcProfile.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref AdminInstanceSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        CreateGcProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /gc-profiles
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/createGcProfile.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+    UpdateGcProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-update-gc-profile
+      CodeUri: .
+      Handler: src/handlers/updateGcProfile.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref AdminInstanceSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        UpdateGcProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /gc-profiles/{id}
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/updateGcProfile.ts
         Minify: false
         Target: es2022
         Sourcemap: true
