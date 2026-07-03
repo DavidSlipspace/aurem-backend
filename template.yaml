@@ -249,6 +249,48 @@ Resources:
         External:
           - pg-native
 
+  GetCasesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-get-cases
+      CodeUri: .
+      Handler: src/handlers/getCases.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref AdminInstanceSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        GetCases:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /cases
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/getCases.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
 Outputs:
   AdminInstanceId:
     Description: EC2 instance ID used for SSM tunnel
@@ -277,3 +319,7 @@ Outputs:
   ApiUrl:
     Description: API Gateway base URL
     Value: !Sub "https://${AuremApi}.execute-api.${AWS::Region}.amazonaws.com/dev"
+  
+  GetCasesEndpoint:
+    Description: GET /cases endpoint
+    Value: !Sub "https://${AuremApi}.execute-api.${AWS::Region}.amazonaws.com/dev/cases"
