@@ -375,7 +375,7 @@ Resources:
         External:
           - pg-native
 
-    UpdateGcProfileFunction:
+  UpdateGcProfileFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: aurem-dev-update-gc-profile
