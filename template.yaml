@@ -207,6 +207,26 @@ Resources:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt UserPool.Arn
 
+  Default4XXGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref AuremApi
+      ResponseType: DEFAULT_4XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
+
+  Default5XXGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref AuremApi
+      ResponseType: DEFAULT_5XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
+
   GetUserFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -552,6 +572,7 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 15
       MemorySize: 256
+
       VpcConfig:
         SecurityGroupIds:
           - !Ref AdminInstanceSecurityGroup
@@ -565,14 +586,14 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-          SES_SOURCE_EMAIL: your-actual-verified-email@example.com
+          SES_SOURCE_EMAIL: david@slipspace.travel
       Policies:
-        - AWSLambdaBasicExecutionRole
-        - Statement:
-            - Effect: Allow
-              Action:
-                - ses:SendEmail
-              Resource: "*"
+      - AWSLambdaBasicExecutionRole
+      - Statement:
+          - Effect: Allow
+            Action:
+              - ses:SendEmail
+            Resource: "*"
       Events:
         SendTripBookingLinkApi:
           Type: Api
