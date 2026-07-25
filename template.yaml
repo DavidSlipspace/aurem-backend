@@ -543,6 +543,54 @@ Resources:
         External:
           - pg-native
 
+  SendTripBookingLinkFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-send-trip-booking-link
+      CodeUri: .
+      Handler: sendTripBookingLink.handler
+      Runtime: nodejs22.x
+      Timeout: 15
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref AdminInstanceSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          SES_SOURCE_EMAIL: your-actual-verified-email@example.com
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource: "*"
+      Events:
+        SendTripBookingLinkApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /trips/{id}/booking-link
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/sendTripBookingLink.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
 Outputs:
   AdminInstanceId:
     Description: EC2 instance ID used for SSM tunnel
