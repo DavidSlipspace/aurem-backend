@@ -1,59 +1,91 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Aurem backend - default VPC, private RDS, Cognito, and SSM admin tunnel
+
+Description: >
+  Aurem backend - private RDS, Cognito, API Gateway, Lambda functions,
+  SSM admin tunnel, private Lambda invocation, and Amazon SES email delivery.
 
 Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
+    Description: Existing VPC used by the Aurem development environment.
 
   SubnetIdA:
     Type: AWS::EC2::Subnet::Id
+    Description: >
+      First private application subnet used by Lambda, RDS, and the
+      SSM administration instance.
 
   SubnetIdB:
     Type: AWS::EC2::Subnet::Id
+    Description: >
+      Second private application subnet used by Lambda and RDS.
+      It should be in a different Availability Zone from SubnetIdA.
 
   DbName:
     Type: String
     Default: auremDev
+    Description: PostgreSQL database name.
 
   DbUsername:
     Type: String
     Default: postgres
+    Description: PostgreSQL administrator username.
 
   DbPassword:
     Type: String
     NoEcho: true
     MinLength: 8
+    Description: PostgreSQL administrator password.
+
+  SesSourceEmail:
+    Type: String
+    Description: >
+      Exact email address verified as an Amazon SES identity in the
+      deployment region.
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    ConstraintDescription: Enter a valid email address.
+
 
 Resources:
-  AdminInstanceSecurityGroup:
+  # ---------------------------------------------------------------------------
+  # SECURITY GROUPS
+  # ---------------------------------------------------------------------------
+
+  ApplicationSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Aurem dev admin tunnel security group
+      GroupDescription: Aurem development application security group for Lambda functions and the SSM administration instance.
       VpcId: !Ref VpcId
+
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
+          Description: Allow outbound database and HTTPS traffic.
+
       Tags:
         - Key: Name
-          Value: aurem-dev-admin-sg
+          Value: aurem-dev-application-sg
         - Key: Application
           Value: Aurem
         - Key: Environment
           Value: Dev
         - Key: Component
-          Value: AdminTunnel
+          Value: Application
 
   DatabaseSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Aurem dev private database security group
+      GroupDescription: Aurem development private PostgreSQL security group.
       VpcId: !Ref VpcId
+
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 5432
           ToPort: 5432
-          SourceSecurityGroupId: !Ref AdminInstanceSecurityGroup
+          SourceSecurityGroupId: !Ref ApplicationSecurityGroup
+          Description: Allow PostgreSQL connections from Aurem Lambda functions and the SSM administration instance.
+
       Tags:
         - Key: Name
           Value: aurem-dev-db-sg
@@ -64,13 +96,96 @@ Resources:
         - Key: Component
           Value: Database
 
-  DatabaseSubnetGroup:
-    Type: AWS::RDS::DBSubnetGroup
+  VpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      DBSubnetGroupDescription: Aurem dev database subnet group
+      GroupDescription: Allows Aurem application resources to connect privately to AWS interface VPC endpoints.
+      VpcId: !Ref VpcId
+
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref ApplicationSecurityGroup
+          Description: HTTPS from Aurem Lambda and administration resources.
+
+      Tags:
+        - Key: Name
+          Value: aurem-dev-vpc-endpoints-sg
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: Networking
+
+
+
+  LambdaVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.lambda
+      PrivateDnsEnabled: true
       SubnetIds:
         - !Ref SubnetIdA
         - !Ref SubnetIdB
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+  SsmVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetIdA
+        - !Ref SubnetIdB
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+  SsmMessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetIdA
+        - !Ref SubnetIdB
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+  Ec2MessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetIdA
+        - !Ref SubnetIdB
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+  # ---------------------------------------------------------------------------
+  # DATABASE
+  # ---------------------------------------------------------------------------
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Aurem development database subnet group.
+
+      SubnetIds:
+        - !Ref SubnetIdA
+        - !Ref SubnetIdB
+
       Tags:
         - Key: Name
           Value: aurem-dev-db-subnet-group
@@ -80,53 +195,6 @@ Resources:
           Value: Dev
         - Key: Component
           Value: Database
-
-  AdminInstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: aurem-dev-admin-instance-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-      Tags:
-        - Key: Application
-          Value: Aurem
-        - Key: Environment
-          Value: Dev
-        - Key: Component
-          Value: AdminTunnel
-
-  AdminInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      InstanceProfileName: aurem-dev-admin-instance-profile
-      Roles:
-        - !Ref AdminInstanceRole
-
-  AdminInstance:
-    Type: AWS::EC2::Instance
-    Properties:
-      InstanceType: t3.micro
-      ImageId: ami-0c02fb55956c7d316
-      IamInstanceProfile: !Ref AdminInstanceProfile
-      SubnetId: !Ref SubnetIdA
-      SecurityGroupIds:
-        - !Ref AdminInstanceSecurityGroup
-      Tags:
-        - Key: Name
-          Value: aurem-dev-admin-ssm-instance
-        - Key: Application
-          Value: Aurem
-        - Key: Environment
-          Value: Dev
-        - Key: Component
-          Value: AdminTunnel
 
   AppDatabase:
     Type: AWS::RDS::DBInstance
@@ -149,6 +217,7 @@ Resources:
       BackupRetentionPeriod: 1
       DeletionProtection: false
       StorageEncrypted: true
+
       Tags:
         - Key: Name
           Value: aurem-dev-db
@@ -161,19 +230,89 @@ Resources:
         - Key: Owner
           Value: David
 
+  # ---------------------------------------------------------------------------
+  # SSM ADMINISTRATION INSTANCE
+  # ---------------------------------------------------------------------------
+
+  AdminInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: aurem-dev-admin-instance-role
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+      Tags:
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: AdminTunnel
+
+  AdminInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: aurem-dev-admin-instance-profile
+      Roles:
+        - !Ref AdminInstanceRole
+
+  AdminInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - SsmVpcEndpoint
+      - SsmMessagesVpcEndpoint
+      - Ec2MessagesVpcEndpoint
+    Properties:
+      InstanceType: t3.micro
+      ImageId: ami-0c02fb55956c7d316
+      IamInstanceProfile: !Ref AdminInstanceProfile
+      SubnetId: !Ref SubnetIdA
+
+      SecurityGroupIds:
+        - !Ref ApplicationSecurityGroup
+
+      Tags:
+        - Key: Name
+          Value: aurem-dev-admin-ssm-instance
+        - Key: Application
+          Value: Aurem
+        - Key: Environment
+          Value: Dev
+        - Key: Component
+          Value: AdminTunnel
+
+  # ---------------------------------------------------------------------------
+  # COGNITO
+  # ---------------------------------------------------------------------------
+
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: aurem-dev-user-pool
+
       UsernameAttributes:
         - email
+
       AutoVerifiedAttributes:
         - email
+
       Schema:
         - Name: email
           AttributeDataType: String
           Required: true
           Mutable: true
+
         - Name: name
           AttributeDataType: String
           Required: true
@@ -185,47 +324,62 @@ Resources:
       ClientName: aurem-dev-frontend-client
       UserPoolId: !Ref UserPool
       GenerateSecret: false
+
       ExplicitAuthFlows:
         - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
+
       PreventUserExistenceErrors: ENABLED
-  
+
+  # ---------------------------------------------------------------------------
+  # API GATEWAY
+  # ---------------------------------------------------------------------------
+
   AuremApi:
     Type: AWS::Serverless::Api
     Properties:
       Name: aurem-dev-api
       StageName: dev
+
       Cors:
         AllowMethods: "'GET,POST,PUT,OPTIONS'"
         AllowHeaders: "'Authorization,Content-Type'"
         AllowOrigin: "'http://localhost:5173'"
+
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
         AddDefaultAuthorizerToCorsPreflight: false
+
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt UserPool.Arn
 
-  Default4XXGatewayResponse:
+  ApiGatewayDefault4xxResponse:
     Type: AWS::ApiGateway::GatewayResponse
     Properties:
       RestApiId: !Ref AuremApi
       ResponseType: DEFAULT_4XX
+
       ResponseParameters:
         gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
 
-  Default5XXGatewayResponse:
+  ApiGatewayDefault5xxResponse:
     Type: AWS::ApiGateway::GatewayResponse
     Properties:
       RestApiId: !Ref AuremApi
       ResponseType: DEFAULT_5XX
+
       ResponseParameters:
         gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
+
+  # ---------------------------------------------------------------------------
+  # USER FUNCTIONS
+  # ---------------------------------------------------------------------------
 
   GetUserFunction:
     Type: AWS::Serverless::Function
@@ -236,12 +390,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
+
       VpcConfig:
         SecurityGroupIds:
-          - !Ref AdminInstanceSecurityGroup
+          - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
+
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -249,8 +405,10 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+
       Policies:
         - AWSLambdaBasicExecutionRole
+
       Events:
         GetUser:
           Type: Api
@@ -258,6 +416,7 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /getUser
             Method: GET
+
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -269,6 +428,10 @@ Resources:
         External:
           - pg-native
 
+  # ---------------------------------------------------------------------------
+  # CASE FUNCTIONS
+  # ---------------------------------------------------------------------------
+
   GetCasesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -278,12 +441,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
+
       VpcConfig:
         SecurityGroupIds:
-          - !Ref AdminInstanceSecurityGroup
+          - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
+
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -291,8 +456,10 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+
       Policies:
         - AWSLambdaBasicExecutionRole
+
       Events:
         GetCases:
           Type: Api
@@ -300,6 +467,7 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /cases
             Method: GET
+
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -311,6 +479,10 @@ Resources:
         External:
           - pg-native
 
+  # ---------------------------------------------------------------------------
+  # GC PROFILE FUNCTIONS
+  # ---------------------------------------------------------------------------
+
   GetGcProfilesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -320,12 +492,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
+
       VpcConfig:
         SecurityGroupIds:
-          - !Ref AdminInstanceSecurityGroup
+          - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
+
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -333,8 +507,10 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+
       Policies:
         - AWSLambdaBasicExecutionRole
+
       Events:
         GetGcProfiles:
           Type: Api
@@ -342,6 +518,7 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /gc-profiles
             Method: GET
+
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -362,12 +539,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
+
       VpcConfig:
         SecurityGroupIds:
-          - !Ref AdminInstanceSecurityGroup
+          - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
+
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -375,8 +554,10 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+
       Policies:
         - AWSLambdaBasicExecutionRole
+
       Events:
         CreateGcProfile:
           Type: Api
@@ -384,6 +565,7 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /gc-profiles
             Method: POST
+
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -404,12 +586,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
+
       VpcConfig:
         SecurityGroupIds:
-          - !Ref AdminInstanceSecurityGroup
+          - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
+
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -417,8 +601,10 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+
       Policies:
         - AWSLambdaBasicExecutionRole
+
       Events:
         UpdateGcProfile:
           Type: Api
@@ -426,6 +612,7 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /gc-profiles/{id}
             Method: PUT
+
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -437,6 +624,10 @@ Resources:
         External:
           - pg-native
 
+  # ---------------------------------------------------------------------------
+  # TRIP FUNCTIONS
+  # ---------------------------------------------------------------------------
+
   GetTripsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -446,12 +637,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
+
       VpcConfig:
         SecurityGroupIds:
-          - !Ref AdminInstanceSecurityGroup
+          - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
+
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -459,8 +652,10 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+
       Policies:
         - AWSLambdaBasicExecutionRole
+
       Events:
         GetTrips:
           Type: Api
@@ -468,6 +663,7 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /trips
             Method: GET
+
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -488,12 +684,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
+
       VpcConfig:
         SecurityGroupIds:
-          - !Ref AdminInstanceSecurityGroup
+          - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
+
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -501,8 +699,10 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+
       Policies:
         - AWSLambdaBasicExecutionRole
+
       Events:
         CreateTrip:
           Type: Api
@@ -510,6 +710,7 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /trips
             Method: POST
+
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -530,12 +731,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
+
       VpcConfig:
         SecurityGroupIds:
-          - !Ref AdminInstanceSecurityGroup
+          - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
+
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -543,8 +746,10 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+
       Policies:
         - AWSLambdaBasicExecutionRole
+
       Events:
         UpdateTrip:
           Type: Api
@@ -552,6 +757,7 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /trips/{id}
             Method: PUT
+
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -563,8 +769,43 @@ Resources:
         External:
           - pg-native
 
+
+  EmailServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-email-service
+      CodeUri: .
+      Handler: sendEmail.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+
+      Environment:
+        Variables:
+          SES_SOURCE_EMAIL: !Ref SesSourceEmail
+
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: SendTransactionalEmail
+              Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource: "*"
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/sendEmail.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+
   SendTripBookingLinkFunction:
     Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
     Properties:
       FunctionName: aurem-dev-send-trip-booking-link
       CodeUri: .
@@ -575,10 +816,11 @@ Resources:
 
       VpcConfig:
         SecurityGroupIds:
-          - !Ref AdminInstanceSecurityGroup
+          - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
+
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -586,14 +828,17 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-          SES_SOURCE_EMAIL: david@slipspace.travel
+          EMAIL_SERVICE_FUNCTION_NAME: !Ref EmailServiceFunction
+
       Policies:
-      - AWSLambdaBasicExecutionRole
-      - Statement:
-          - Effect: Allow
-            Action:
-              - ses:SendEmail
-            Resource: "*"
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeEmailService
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt EmailServiceFunction.Arn
+
       Events:
         SendTripBookingLinkApi:
           Type: Api
@@ -601,6 +846,7 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /trips/{id}/booking-link
             Method: POST
+
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -614,33 +860,49 @@ Resources:
 
 Outputs:
   AdminInstanceId:
-    Description: EC2 instance ID used for SSM tunnel
+    Description: EC2 instance ID used for the SSM database tunnel.
     Value: !Ref AdminInstance
 
   DatabaseEndpoint:
-    Description: Private RDS database endpoint
+    Description: Private RDS database endpoint.
     Value: !GetAtt AppDatabase.Endpoint.Address
 
   DatabaseName:
-    Description: Database name
+    Description: Database name.
     Value: !Ref DbName
 
   DatabasePort:
-    Description: Database port
+    Description: Database port.
     Value: !GetAtt AppDatabase.Endpoint.Port
 
   CognitoUserPoolId:
-    Description: Cognito User Pool ID
+    Description: Cognito User Pool ID.
     Value: !Ref UserPool
 
   CognitoUserPoolClientId:
-    Description: Cognito User Pool Client ID
+    Description: Cognito User Pool Client ID.
     Value: !Ref UserPoolClient
-  
+
   ApiUrl:
-    Description: API Gateway base URL
+    Description: API Gateway base URL.
     Value: !Sub "https://${AuremApi}.execute-api.${AWS::Region}.amazonaws.com/dev"
-  
+
   GetCasesEndpoint:
-    Description: GET /cases endpoint
+    Description: GET /cases endpoint.
     Value: !Sub "https://${AuremApi}.execute-api.${AWS::Region}.amazonaws.com/dev/cases"
+
+  LambdaVpcEndpointId:
+    Description: Private interface endpoint used by VPC Lambdas to invoke AWS Lambda.
+    Value: !Ref LambdaVpcEndpoint
+
+  EmailServiceFunctionName:
+    Description: Reusable non-VPC Lambda function that sends transactional email through Amazon SES.
+    Value: !Ref EmailServiceFunction
+
+  SsmVpcEndpointId:
+    Description: Private interface endpoint used by the SSM administration instance.
+    Value: !Ref SsmVpcEndpoint
+
+  SesSenderEmail:
+    Description: Amazon SES sender identity configured for trip emails.
+    Value: !Ref SesSourceEmail

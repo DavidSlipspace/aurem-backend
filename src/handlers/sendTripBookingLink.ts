@@ -4,13 +4,18 @@ import type {
 } from "aws-lambda";
 
 import {
-  SESv2Client,
-  SendEmailCommand
-} from "@aws-sdk/client-sesv2";
+  InvokeCommand,
+  LambdaClient
+} from "@aws-sdk/client-lambda";
 
 import { getPool } from "../db/pool";
 import { jsonResponse } from "../common/response";
 import { getCurrentUser } from "../common/currentUser";
+
+import type {
+  SendEmailRequest,
+  SendEmailResult
+} from "./sendEmail";
 
 type TripEmailRow = {
   id: string;
@@ -20,10 +25,21 @@ type TripEmailRow = {
   gc_email: string | null;
 };
 
-const sesClient = new SESv2Client({});
+const lambdaClient = new LambdaClient({});
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function getErrorDetails(error: unknown): {
@@ -42,6 +58,32 @@ function getErrorDetails(error: unknown): {
   return {
     name: "UnknownError",
     message: String(error)
+  };
+}
+
+function parseEmailServiceResult(
+  payload: Uint8Array | undefined
+): SendEmailResult {
+  if (!payload) {
+    throw new Error(
+      "The email service returned an empty response."
+    );
+  }
+
+  const decodedPayload = textDecoder.decode(payload);
+  const parsedPayload = JSON.parse(decodedPayload) as Partial<SendEmailResult>;
+
+  if (
+    typeof parsedPayload.messageId !== "string" ||
+    parsedPayload.messageId.length === 0
+  ) {
+    throw new Error(
+      "The email service response did not contain a message ID."
+    );
+  }
+
+  return {
+    messageId: parsedPayload.messageId
   };
 }
 
@@ -94,17 +136,17 @@ export async function handler(
       });
     }
 
-    const sourceEmail =
-      process.env.SES_SOURCE_EMAIL;
+    const emailServiceFunctionName =
+      process.env.EMAIL_SERVICE_FUNCTION_NAME;
 
-    if (!sourceEmail) {
+    if (!emailServiceFunctionName) {
       console.error(
-        "SES_SOURCE_EMAIL environment variable is missing."
+        "EMAIL_SERVICE_FUNCTION_NAME environment variable is missing."
       );
 
       return jsonResponse(500, {
         message:
-          "The SES sender email has not been configured."
+          "The email service has not been configured."
       });
     }
 
@@ -122,8 +164,7 @@ export async function handler(
       accessClause = "cm.company_id = $2";
       params.push(currentUser.companyId);
     } else {
-      accessClause =
-        "c.case_manager_user_id = $2";
+      accessClause = "c.case_manager_user_id = $2";
       params.push(currentUser.id);
     }
 
@@ -184,6 +225,8 @@ export async function handler(
     const gcName =
       `${trip.gc_first_name} ${trip.gc_last_name}`.trim();
 
+    const safeGcName = escapeHtml(gcName);
+
     console.log("7. Trip and GC email validated", {
       tripId: trip.id,
       tripReferenceId: trip.trip_reference_id,
@@ -191,97 +234,76 @@ export async function handler(
       destinationEmail: trip.gc_email
     });
 
-    console.log("8. Starting SES SendEmail request", {
-      sourceEmail,
+    const emailRequest: SendEmailRequest = {
+      to: trip.gc_email,
+      subject: "Hello from Aurem",
+      textBody: `Hello ${gcName}`,
+      htmlBody: `
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta
+              name="viewport"
+              content="width=device-width, initial-scale=1.0"
+            />
+            <title>Hello from Aurem</title>
+          </head>
+          <body>
+            <p>Hello ${safeGcName}</p>
+          </body>
+        </html>
+      `.trim()
+    };
+
+    console.log("8. Invoking email service", {
+      emailServiceFunctionName,
       destinationEmail: trip.gc_email
     });
 
-    /*
-     * Abort the SES request before the Lambda's overall timeout.
-     *
-     * Your Lambda currently has a 15-second timeout. This aborts the SES
-     * request after eight seconds so the catch block can return a useful
-     * response instead of API Gateway receiving an unexplained 502.
-     */
-    const abortController = new AbortController();
+    const invokeResponse = await lambdaClient.send(
+      new InvokeCommand({
+        FunctionName: emailServiceFunctionName,
+        InvocationType: "RequestResponse",
+        Payload: textEncoder.encode(
+          JSON.stringify(emailRequest)
+        )
+      })
+    );
 
-    const abortTimer = setTimeout(() => {
-      console.error(
-        "SES request exceeded eight seconds. Aborting request."
-      );
+    if (invokeResponse.FunctionError) {
+      const errorPayload = invokeResponse.Payload
+        ? textDecoder.decode(invokeResponse.Payload)
+        : "No error payload returned.";
 
-      abortController.abort();
-    }, 8000);
-
-    try {
-      const sesResponse = await sesClient.send(
-        new SendEmailCommand({
-          FromEmailAddress: sourceEmail,
-
-          Destination: {
-            ToAddresses: [trip.gc_email]
-          },
-
-          Content: {
-            Simple: {
-              Subject: {
-                Data: "Hello from Aurem",
-                Charset: "UTF-8"
-              },
-
-              Body: {
-                Text: {
-                  Data: `Hello ${gcName}`,
-                  Charset: "UTF-8"
-                },
-
-                Html: {
-                  Data: `
-                    <!DOCTYPE html>
-                    <html lang="en">
-                      <head>
-                        <meta charset="UTF-8" />
-                        <meta
-                          name="viewport"
-                          content="width=device-width, initial-scale=1.0"
-                        />
-                        <title>Hello from Aurem</title>
-                      </head>
-                      <body>
-                        <p>Hello ${gcName}</p>
-                      </body>
-                    </html>
-                  `.trim(),
-                  Charset: "UTF-8"
-                }
-              }
-            }
-          }
-        }),
-        {
-          abortSignal: abortController.signal
-        }
-      );
-
-      console.log("9. SES SendEmail request completed", {
-        messageId: sesResponse.MessageId
+      console.error("Email service returned an error", {
+        functionError: invokeResponse.FunctionError,
+        errorPayload
       });
 
-      return jsonResponse(200, {
-        message: "Test email sent successfully.",
-        tripId: trip.id,
-        tripReferenceId: trip.trip_reference_id,
-        sentTo: trip.gc_email,
-        gcName,
-        messageId: sesResponse.MessageId,
-        sesSkipped: false
-      });
-    } finally {
-      clearTimeout(abortTimer);
+      throw new Error(
+        `Email service failed: ${errorPayload}`
+      );
     }
+
+    const emailResult = parseEmailServiceResult(
+      invokeResponse.Payload
+    );
+
+    console.log("9. Email service completed", {
+      messageId: emailResult.messageId
+    });
+
+    return jsonResponse(200, {
+      message: "Test email sent successfully.",
+      tripId: trip.id,
+      tripReferenceId: trip.trip_reference_id,
+      sentTo: trip.gc_email,
+      gcName,
+      messageId: emailResult.messageId
+    });
   } catch (error) {
-    const errorDetails =
-      getErrorDetails(error);
+    const errorDetails = getErrorDetails(error);
 
     console.error(
       "POST /trips/{id}/booking-link failed",
@@ -289,34 +311,21 @@ export async function handler(
     );
 
     if (
-      errorDetails.name === "AbortError" ||
-      errorDetails.name ===
-        "RequestAbortedError"
-    ) {
-      return jsonResponse(504, {
-        message:
-          "The trip and GC were loaded, but the Lambda could not connect to Amazon SES before the request timed out.",
-        error: errorDetails.name
-      });
-    }
-
-    if (
-      errorDetails.name === "MessageRejected"
-    ) {
-      return jsonResponse(502, {
-        message:
-          "Amazon SES rejected the email. Confirm that the sender and recipient identities are verified in the Lambda's AWS region.",
-        error: errorDetails.name
-      });
-    }
-
-    if (
-      errorDetails.name ===
-        "AccessDeniedException"
+      errorDetails.name === "AccessDeniedException"
     ) {
       return jsonResponse(500, {
         message:
-          "The Lambda does not have permission to send email through Amazon SES.",
+          "The booking-link Lambda does not have permission to invoke the email service.",
+        error: errorDetails.name
+      });
+    }
+
+    if (
+      errorDetails.name === "ResourceNotFoundException"
+    ) {
+      return jsonResponse(500, {
+        message:
+          "The configured email service Lambda could not be found.",
         error: errorDetails.name
       });
     }
