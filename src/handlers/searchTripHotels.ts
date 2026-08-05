@@ -25,8 +25,8 @@ type TripHotelSearchRow = {
   gc_first_name: string;
   gc_last_name: string;
 
-  outbound_date: string;
-  return_date: string;
+  outbound_date: Date | string;
+  return_date: Date | string;
 
   destination_city: string | null;
   destination_address: string | null;
@@ -76,9 +76,59 @@ function getErrorDetails(error: unknown): {
 }
 
 function normalizeDateValue(
-  value: string
+  value: Date | string
 ): string {
-  return value.substring(0, 10);
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new Error(
+        "The trip contains an invalid date."
+      );
+    }
+
+    return value
+      .toISOString()
+      .substring(0, 10);
+  }
+
+  if (typeof value === "string") {
+    const normalizedValue = value.trim();
+
+    if (!normalizedValue) {
+      throw new Error(
+        "The trip contains an empty date."
+      );
+    }
+
+    const directDateMatch =
+      normalizedValue.match(
+        /^\d{4}-\d{2}-\d{2}/
+      );
+
+    if (directDateMatch) {
+      return directDateMatch[0];
+    }
+
+    const parsedDate =
+      new Date(normalizedValue);
+
+    if (
+      Number.isNaN(
+        parsedDate.getTime()
+      )
+    ) {
+      throw new Error(
+        "The trip contains an invalid date."
+      );
+    }
+
+    return parsedDate
+      .toISOString()
+      .substring(0, 10);
+  }
+
+  throw new Error(
+    "The trip date is in an unsupported format."
+  );
 }
 
 function buildDestination(
@@ -180,13 +230,17 @@ function parseHotelProviderResult(
   ) as Partial<HotelProviderResult>;
 
   if (
-    !Array.isArray(parsedPayload.hotels) ||
-    typeof parsedPayload.destination !==
+    !Array.isArray(
+      parsedPayload.hotels
+    ) ||
+    typeof
+      parsedPayload.destination !==
       "string" ||
     typeof
       parsedPayload.resolvedDestination !==
       "string" ||
-    typeof parsedPayload.hotelBudgetCents !==
+    typeof
+      parsedPayload.hotelBudgetCents !==
       "number"
   ) {
     throw new Error(
@@ -222,14 +276,17 @@ export async function handler(
       process.env
         .HOTEL_PROVIDER_FUNCTION_NAME;
 
-    if (!hotelProviderFunctionName) {
+    if (
+      !hotelProviderFunctionName
+    ) {
       return jsonResponse(500, {
         message:
           "The hotel provider has not been configured."
       });
     }
 
-    const tokenHash = hashToken(token);
+    const tokenHash =
+      hashToken(token);
 
     const result =
       await getPool()
@@ -288,8 +345,30 @@ export async function handler(
     const destination =
       buildDestination(trip);
 
+    const checkInDate =
+      normalizeDateValue(
+        trip.outbound_date
+      );
+
+    const checkOutDate =
+      normalizeDateValue(
+        trip.return_date
+      );
+
+    if (
+      checkOutDate <=
+      checkInDate
+    ) {
+      return jsonResponse(400, {
+        message:
+          "The trip return date must be after the outbound date."
+      });
+    }
+
     const totalTripBudgetCents =
-      Number(trip.budget_filter);
+      Number(
+        trip.budget_filter
+      );
 
     if (
       !Number.isInteger(
@@ -319,19 +398,29 @@ export async function handler(
             trip.minimum_hotel_star_rating
           );
 
+    if (
+      minimumStarRating !==
+        undefined &&
+      (
+        !Number.isInteger(
+          minimumStarRating
+        ) ||
+        minimumStarRating < 1 ||
+        minimumStarRating > 5
+      )
+    ) {
+      return jsonResponse(400, {
+        message:
+          "The trip has an invalid minimum hotel star rating."
+      });
+    }
+
     const providerRequest:
       HotelProviderRequest = {
       destination,
 
-      checkInDate:
-        normalizeDateValue(
-          trip.outbound_date
-        ),
-
-      checkOutDate:
-        normalizeDateValue(
-          trip.return_date
-        ),
+      checkInDate,
+      checkOutDate,
 
       adultGuests:
         trip.companion_traveler
@@ -350,7 +439,8 @@ export async function handler(
 
       hotelBudgetCents,
 
-      currency: DEFAULT_CURRENCY,
+      currency:
+        DEFAULT_CURRENCY,
 
       maximumResults:
         MAXIMUM_HOTEL_RESULTS
@@ -360,20 +450,32 @@ export async function handler(
       "Invoking hotel provider",
       {
         hotelProviderFunctionName,
+
         tripReferenceId:
           trip.trip_reference_id,
+
         destination,
+
         checkInDate:
-          providerRequest.checkInDate,
+          providerRequest
+            .checkInDate,
+
         checkOutDate:
-          providerRequest.checkOutDate,
+          providerRequest
+            .checkOutDate,
+
         adultGuests:
-          providerRequest.adultGuests,
+          providerRequest
+            .adultGuests,
+
         radiusKilometers:
           providerRequest
             .radiusKilometers,
+
         minimumStarRating:
-          minimumStarRating ?? null,
+          minimumStarRating ??
+          null,
+
         hotelBudgetCents
       }
     );
@@ -387,11 +489,12 @@ export async function handler(
           InvocationType:
             "RequestResponse",
 
-          Payload: textEncoder.encode(
-            JSON.stringify(
-              providerRequest
+          Payload:
+            textEncoder.encode(
+              JSON.stringify(
+                providerRequest
+              )
             )
-          )
         })
       );
 
@@ -411,6 +514,7 @@ export async function handler(
           functionError:
             invokeResponse
               .FunctionError,
+
           errorPayload
         }
       );
@@ -434,20 +538,24 @@ export async function handler(
       tripReferenceId:
         trip.trip_reference_id,
 
-      gcName: gcName.trim(),
+      gcName:
+        gcName.trim(),
 
       destination:
         providerResult
           .resolvedDestination,
 
       checkInDate:
-        providerResult.checkInDate,
+        providerResult
+          .checkInDate,
 
       checkOutDate:
-        providerResult.checkOutDate,
+        providerResult
+          .checkOutDate,
 
       adultGuests:
-        providerResult.adultGuests,
+        providerResult
+          .adultGuests,
 
       rooms:
         providerResult.rooms,
@@ -470,7 +578,10 @@ export async function handler(
         providerResult.hotels
     };
 
-    return jsonResponse(200, response);
+    return jsonResponse(
+      200,
+      response
+    );
   } catch (error) {
     const errorDetails =
       getErrorDetails(error);
@@ -487,6 +598,7 @@ export async function handler(
       return jsonResponse(500, {
         message:
           "The hotel-search Lambda does not have permission to invoke the hotel provider.",
+
         error:
           errorDetails.name
       });
@@ -499,6 +611,7 @@ export async function handler(
       return jsonResponse(500, {
         message:
           "The configured hotel provider Lambda could not be found.",
+
         error:
           errorDetails.name
       });
@@ -507,6 +620,7 @@ export async function handler(
     return jsonResponse(500, {
       message:
         "Unable to search for hotels.",
+
       error:
         errorDetails.name
     });
