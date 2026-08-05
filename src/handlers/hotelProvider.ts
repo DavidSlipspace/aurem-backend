@@ -97,8 +97,6 @@ const MAPBOX_FORWARD_URL =
 const DUFFEL_STAYS_SEARCH_URL =
   "https://api.duffel.com/stays/search";
 
-const MILES_PER_KILOMETER = 0.621371;
-
 function getErrorDetails(error: unknown): {
   name: string;
   message: string;
@@ -156,7 +154,9 @@ function isHotelProviderRequest(
       value.minimumStarRating === undefined ||
       (
         typeof value.minimumStarRating === "number" &&
-        Number.isInteger(value.minimumStarRating) &&
+        Number.isInteger(
+          value.minimumStarRating
+        ) &&
         value.minimumStarRating >= 1 &&
         value.minimumStarRating <= 5
       )
@@ -214,7 +214,8 @@ function getFiniteNumber(
 function convertAmountToCents(
   value: unknown
 ): number | null {
-  const numericValue = getFiniteNumber(value);
+  const numericValue =
+    getFiniteNumber(value);
 
   if (numericValue === null) {
     return null;
@@ -235,13 +236,17 @@ function calculateDistanceMiles(
 ): number {
   const earthRadiusMiles = 3958.7613;
 
-  const latitudeDifference = toRadians(
-    destinationLatitude - originLatitude
-  );
+  const latitudeDifference =
+    toRadians(
+      destinationLatitude -
+        originLatitude
+    );
 
-  const longitudeDifference = toRadians(
-    destinationLongitude - originLongitude
-  );
+  const longitudeDifference =
+    toRadians(
+      destinationLongitude -
+        originLongitude
+    );
 
   const originLatitudeRadians =
     toRadians(originLatitude);
@@ -250,10 +255,18 @@ function calculateDistanceMiles(
     toRadians(destinationLatitude);
 
   const haversine =
-    Math.sin(latitudeDifference / 2) ** 2 +
-    Math.cos(originLatitudeRadians) *
-      Math.cos(destinationLatitudeRadians) *
-      Math.sin(longitudeDifference / 2) ** 2;
+    Math.sin(
+      latitudeDifference / 2
+    ) ** 2 +
+    Math.cos(
+      originLatitudeRadians
+    ) *
+      Math.cos(
+        destinationLatitudeRadians
+      ) *
+      Math.sin(
+        longitudeDifference / 2
+      ) ** 2;
 
   const angularDistance =
     2 *
@@ -262,7 +275,10 @@ function calculateDistanceMiles(
       Math.sqrt(1 - haversine)
     );
 
-  return earthRadiusMiles * angularDistance;
+  return (
+    earthRadiusMiles *
+    angularDistance
+  );
 }
 
 function formatAddress(
@@ -274,15 +290,21 @@ function formatAddress(
   postalCode: string | null;
   countryCode: string | null;
 } {
-  const lineOne = getString(address?.line_one);
-  const city = getString(address?.city_name) ?? "";
-  const region = getString(address?.region);
-  const postalCode = getString(
-    address?.postal_code
-  );
-  const countryCode = getString(
-    address?.country_code
-  );
+  const lineOne =
+    getString(address?.line_one);
+
+  const city =
+    getString(address?.city_name) ??
+    "";
+
+  const region =
+    getString(address?.region);
+
+  const postalCode =
+    getString(address?.postal_code);
+
+  const countryCode =
+    getString(address?.country_code);
 
   const fullAddress = [
     lineOne,
@@ -292,7 +314,9 @@ function formatAddress(
     countryCode
   ]
     .filter(
-      (value): value is string =>
+      (
+        value
+      ): value is string =>
         typeof value === "string" &&
         value.length > 0
     )
@@ -300,7 +324,9 @@ function formatAddress(
 
   return {
     fullAddress:
-      fullAddress || "Address unavailable",
+      fullAddress ||
+      "Address unavailable",
+
     city,
     region,
     postalCode,
@@ -309,7 +335,10 @@ function formatAddress(
 }
 
 function normalizeAmenities(
-  amenities: DuffelAmenity[] | null | undefined
+  amenities:
+    | DuffelAmenity[]
+    | null
+    | undefined
 ): string[] {
   if (!Array.isArray(amenities)) {
     return [];
@@ -318,30 +347,37 @@ function normalizeAmenities(
   const normalized = amenities
     .map((amenity) => {
       return (
-        getString(amenity.description) ??
+        getString(
+          amenity.description
+        ) ??
         getString(amenity.type)
       );
     })
     .filter(
-      (value): value is string =>
+      (
+        value
+      ): value is string =>
         value !== null
     );
 
-  return Array.from(new Set(normalized)).slice(
-    0,
-    6
-  );
+  return Array.from(
+    new Set(normalized)
+  ).slice(0, 6);
 }
 
 function getPrimaryPhotoUrl(
-  photos: DuffelPhoto[] | null | undefined
+  photos:
+    | DuffelPhoto[]
+    | null
+    | undefined
 ): string | null {
   if (!Array.isArray(photos)) {
     return null;
   }
 
   for (const photo of photos) {
-    const url = getString(photo.url);
+    const url =
+      getString(photo.url);
 
     if (url) {
       return url;
@@ -354,7 +390,8 @@ function getPrimaryPhotoUrl(
 async function parseJsonResponse<T>(
   response: Response
 ): Promise<T> {
-  const responseText = await response.text();
+  const responseText =
+    await response.text();
 
   if (!responseText) {
     throw new Error(
@@ -363,7 +400,9 @@ async function parseJsonResponse<T>(
   }
 
   try {
-    return JSON.parse(responseText) as T;
+    return JSON.parse(
+      responseText
+    ) as T;
   } catch {
     throw new Error(
       `Remote service returned invalid JSON with status ${response.status}.`
@@ -375,24 +414,45 @@ async function geocodeDestination(
   destination: string,
   mapboxAccessToken: string
 ): Promise<GeocodedDestination> {
-  const url = new URL(MAPBOX_FORWARD_URL);
+  const url =
+    new URL(MAPBOX_FORWARD_URL);
 
-  url.searchParams.set("q", destination);
+  url.searchParams.set(
+    "q",
+    destination
+  );
+
   url.searchParams.set(
     "access_token",
     mapboxAccessToken
   );
-  url.searchParams.set("limit", "1");
-  url.searchParams.set("autocomplete", "false");
-  url.searchParams.set("country", "US");
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Accept: "application/json"
-    },
-    signal: AbortSignal.timeout(8000)
-  });
+  url.searchParams.set(
+    "limit",
+    "1"
+  );
+
+  url.searchParams.set(
+    "autocomplete",
+    "false"
+  );
+
+  url.searchParams.set(
+    "country",
+    "US"
+  );
+
+  const response = await fetch(
+    url,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json"
+      },
+      signal:
+        AbortSignal.timeout(8000)
+    }
+  );
 
   const responseBody =
     await parseJsonResponse<MapboxResponse>(
@@ -406,13 +466,16 @@ async function geocodeDestination(
     );
   }
 
-  const feature = responseBody.features?.[0];
+  const feature =
+    responseBody.features?.[0];
 
   const coordinates =
     feature?.geometry?.coordinates;
 
   if (
-    !Array.isArray(coordinates) ||
+    !Array.isArray(
+      coordinates
+    ) ||
     coordinates.length < 2
   ) {
     throw new Error(
@@ -420,13 +483,15 @@ async function geocodeDestination(
     );
   }
 
-  const longitude = getFiniteNumber(
-    coordinates[0]
-  );
+  const longitude =
+    getFiniteNumber(
+      coordinates[0]
+    );
 
-  const latitude = getFiniteNumber(
-    coordinates[1]
-  );
+  const latitude =
+    getFiniteNumber(
+      coordinates[1]
+    );
 
   if (
     latitude === null ||
@@ -437,23 +502,38 @@ async function geocodeDestination(
     );
   }
 
-  const resolvedDestination =
-    getString(feature?.properties?.full_address) ??
+  const fallbackDestination =
     [
       getString(
-        feature?.properties?.name_preferred
+        feature?.properties
+          ?.name_preferred
       ) ??
-        getString(feature?.properties?.name),
+        getString(
+          feature?.properties?.name
+        ),
+
       getString(
-        feature?.properties?.place_formatted
+        feature?.properties
+          ?.place_formatted
       )
     ]
       .filter(
-        (value): value is string =>
+        (
+          value
+        ): value is string =>
           value !== null
       )
-      .join(", ") ||
-    destination;
+      .join(", ");
+
+  const resolvedDestination =
+    getString(
+      feature?.properties
+        ?.full_address
+    ) ??
+    (
+      fallbackDestination ||
+      destination
+    );
 
   return {
     latitude,
@@ -464,52 +544,83 @@ async function geocodeDestination(
 
 async function searchDuffelHotels(
   request: HotelProviderRequest,
-  geocodedDestination: GeocodedDestination,
+  geocodedDestination:
+    GeocodedDestination,
   duffelAccessToken: string
 ): Promise<DuffelSearchResult[]> {
-  const guests = Array.from(
-    {
-      length: request.adultGuests
-    },
-    () => ({
-      type: "adult"
-    })
-  );
+  const guests =
+    Array.from(
+      {
+        length:
+          request.adultGuests
+      },
+      () => ({
+        type: "adult"
+      })
+    );
 
   const response = await fetch(
     DUFFEL_STAYS_SEARCH_URL,
     {
       method: "POST",
       headers: {
-        Accept: "application/json",
-        "Accept-Encoding": "gzip",
-        "Content-Type": "application/json",
-        "Duffel-Version": "v2",
+        Accept:
+          "application/json",
+
+        "Accept-Encoding":
+          "gzip",
+
+        "Content-Type":
+          "application/json",
+
+        "Duffel-Version":
+          "v2",
+
         Authorization:
           `Bearer ${duffelAccessToken}`
       },
+
       body: JSON.stringify({
         data: {
-          rooms: request.rooms,
+          rooms:
+            request.rooms,
+
           mobile: false,
+
           location: {
-            radius: Math.round(
-              request.radiusKilometers
-            ),
-            geographic_coordinates: {
-              longitude:
-                geocodedDestination.longitude,
-              latitude:
-                geocodedDestination.latitude
-            }
+            radius:
+              Math.round(
+                request
+                  .radiusKilometers
+              ),
+
+            geographic_coordinates:
+              {
+                longitude:
+                  geocodedDestination
+                    .longitude,
+
+                latitude:
+                  geocodedDestination
+                    .latitude
+              }
           },
+
           guests,
-          free_cancellation_only: false,
-          check_in_date: request.checkInDate,
-          check_out_date: request.checkOutDate
+
+          free_cancellation_only:
+            false,
+
+          check_in_date:
+            request.checkInDate,
+
+          check_out_date:
+            request.checkOutDate
         }
       }),
-      signal: AbortSignal.timeout(18000)
+
+      signal:
+        AbortSignal.timeout(18000)
     }
   );
 
@@ -523,12 +634,18 @@ async function searchDuffelHotels(
       responseBody.errors
         ?.map((error) => {
           return (
-            getString(error.message) ??
-            getString(error.title)
+            getString(
+              error.message
+            ) ??
+            getString(
+              error.title
+            )
           );
         })
         .filter(
-          (value): value is string =>
+          (
+            value
+          ): value is string =>
             value !== null
         )
         .join("; ");
@@ -552,28 +669,34 @@ function normalizeHotelOption(
   destinationLatitude: number,
   destinationLongitude: number
 ): HotelOption | null {
-  const searchResultId = getString(result.id);
+  const searchResultId =
+    getString(result.id);
 
   const accommodation =
     result.accommodation;
 
-  const accommodationId = getString(
-    accommodation?.id
-  );
+  const accommodationId =
+    getString(
+      accommodation?.id
+    );
 
-  const name = getString(
-    accommodation?.name
-  );
+  const name =
+    getString(
+      accommodation?.name
+    );
 
   const totalAmountCents =
     convertAmountToCents(
-      result.cheapest_rate_total_amount
+      result
+        .cheapest_rate_total_amount
     );
 
   const currency =
     getString(
-      result.cheapest_rate_currency
-    )?.toUpperCase() ?? null;
+      result
+        .cheapest_rate_currency
+    )?.toUpperCase() ??
+    null;
 
   if (
     !searchResultId ||
@@ -585,12 +708,14 @@ function normalizeHotelOption(
     return null;
   }
 
-  const starRating = getFiniteNumber(
-    accommodation?.rating
-  );
+  const starRating =
+    getFiniteNumber(
+      accommodation?.rating
+    );
 
   if (
-    request.minimumStarRating !== undefined &&
+    request.minimumStarRating !==
+      undefined &&
     (
       starRating === null ||
       starRating <
@@ -600,23 +725,31 @@ function normalizeHotelOption(
     return null;
   }
 
-  const reviewScore = getFiniteNumber(
-    accommodation?.review_score
-  );
+  const reviewScore =
+    getFiniteNumber(
+      accommodation?.review_score
+    );
 
-  const reviewCount = getFiniteNumber(
-    accommodation?.review_count
-  );
+  const reviewCount =
+    getFiniteNumber(
+      accommodation?.review_count
+    );
 
-  const latitude = getFiniteNumber(
-    accommodation?.location
-      ?.geographic_coordinates?.latitude
-  );
+  const latitude =
+    getFiniteNumber(
+      accommodation
+        ?.location
+        ?.geographic_coordinates
+        ?.latitude
+    );
 
-  const longitude = getFiniteNumber(
-    accommodation?.location
-      ?.geographic_coordinates?.longitude
-  );
+  const longitude =
+    getFiniteNumber(
+      accommodation
+        ?.location
+        ?.geographic_coordinates
+        ?.longitude
+    );
 
   const distanceMiles =
     latitude !== null &&
@@ -629,36 +762,61 @@ function normalizeHotelOption(
         )
       : null;
 
-  const formattedAddress = formatAddress(
-    accommodation?.location?.address
-  );
+  const formattedAddress =
+    formatAddress(
+      accommodation
+        ?.location
+        ?.address
+    );
 
   return {
     searchResultId,
     accommodationId,
 
     name,
-    description:
-      getString(accommodation?.description),
 
-    address: formattedAddress.fullAddress,
-    city: formattedAddress.city,
-    region: formattedAddress.region,
-    postalCode: formattedAddress.postalCode,
+    description:
+      getString(
+        accommodation
+          ?.description
+      ),
+
+    address:
+      formattedAddress
+        .fullAddress,
+
+    city:
+      formattedAddress.city,
+
+    region:
+      formattedAddress.region,
+
+    postalCode:
+      formattedAddress
+        .postalCode,
+
     countryCode:
-      formattedAddress.countryCode,
+      formattedAddress
+        .countryCode,
 
     latitude,
     longitude,
+
     distanceFromDestinationMiles:
       distanceMiles === null
         ? null
-        : Number(distanceMiles.toFixed(1)),
+        : Number(
+            distanceMiles.toFixed(
+              1
+            )
+          ),
 
     starRating:
       starRating === null
         ? null
-        : Math.floor(starRating),
+        : Math.floor(
+            starRating
+          ),
 
     reviewScore,
     reviewCount,
@@ -668,13 +826,15 @@ function normalizeHotelOption(
 
     currency,
 
-    photoUrl: getPrimaryPhotoUrl(
-      accommodation?.photos
-    ),
+    photoUrl:
+      getPrimaryPhotoUrl(
+        accommodation?.photos
+      ),
 
-    amenities: normalizeAmenities(
-      accommodation?.amenities
-    ),
+    amenities:
+      normalizeAmenities(
+        accommodation?.amenities
+      ),
 
     loyaltyProgram:
       getString(
@@ -683,11 +843,14 @@ function normalizeHotelOption(
       ),
 
     expiresAt:
-      getString(result.expires_at),
+      getString(
+        result.expires_at
+      ),
 
     isWithinBudget:
       currency ===
-        request.currency.toUpperCase() &&
+        request.currency
+          .toUpperCase() &&
       totalAmountCents <=
         request.hotelBudgetCents
   };
@@ -697,7 +860,10 @@ function rankHotelOptions(
   hotels: HotelOption[]
 ): HotelOption[] {
   return [...hotels].sort(
-    (first, second) => {
+    (
+      first,
+      second
+    ) => {
       if (
         first.isWithinBudget !==
         second.isWithinBudget
@@ -708,18 +874,28 @@ function rankHotelOptions(
       }
 
       if (
-        first.cheapestTotalAmountCents !==
-        second.cheapestTotalAmountCents
+        first
+          .cheapestTotalAmountCents !==
+        second
+          .cheapestTotalAmountCents
       ) {
         return (
-          first.cheapestTotalAmountCents -
-          second.cheapestTotalAmountCents
+          first
+            .cheapestTotalAmountCents -
+          second
+            .cheapestTotalAmountCents
         );
       }
 
       return (
-        (second.reviewScore ?? 0) -
-        (first.reviewScore ?? 0)
+        (
+          second.reviewScore ??
+          0
+        ) -
+        (
+          first.reviewScore ??
+          0
+        )
       );
     }
   );
@@ -732,17 +908,23 @@ export async function handler(
     "Hotel provider request received"
   );
 
-  if (!isHotelProviderRequest(event)) {
+  if (
+    !isHotelProviderRequest(
+      event
+    )
+  ) {
     throw new Error(
       "Hotel provider received an invalid request."
     );
   }
 
   const duffelAccessToken =
-    process.env.DUFFEL_ACCESS_TOKEN;
+    process.env
+      .DUFFEL_ACCESS_TOKEN;
 
   const mapboxAccessToken =
-    process.env.MAPBOX_ACCESS_TOKEN;
+    process.env
+      .MAPBOX_ACCESS_TOKEN;
 
   if (!duffelAccessToken) {
     throw new Error(
@@ -776,8 +958,10 @@ export async function handler(
           return normalizeHotelOption(
             result,
             event,
-            geocodedDestination.latitude,
-            geocodedDestination.longitude
+            geocodedDestination
+              .latitude,
+            geocodedDestination
+              .longitude
           );
         })
         .filter(
@@ -790,35 +974,44 @@ export async function handler(
     const rankedHotels =
       rankHotelOptions(
         normalizedHotels
-      ).slice(0, event.maximumResults);
+      ).slice(
+        0,
+        event.maximumResults
+      );
 
     console.log(
       "Hotel provider search completed",
       {
         destination:
           event.destination,
+
         resolvedDestination:
           geocodedDestination
             .resolvedDestination,
+
         providerResultCount:
           duffelResults.length,
+
         returnedResultCount:
           rankedHotels.length
       }
     );
 
     return {
-      destination: event.destination,
+      destination:
+        event.destination,
 
       resolvedDestination:
         geocodedDestination
           .resolvedDestination,
 
       destinationLatitude:
-        geocodedDestination.latitude,
+        geocodedDestination
+          .latitude,
 
       destinationLongitude:
-        geocodedDestination.longitude,
+        geocodedDestination
+          .longitude,
 
       checkInDate:
         event.checkInDate,
@@ -829,21 +1022,25 @@ export async function handler(
       adultGuests:
         event.adultGuests,
 
-      rooms: event.rooms,
+      rooms:
+        event.rooms,
 
       radiusKilometers:
         event.radiusKilometers,
 
       minimumStarRating:
-        event.minimumStarRating ?? null,
+        event.minimumStarRating ??
+        null,
 
       hotelBudgetCents:
         event.hotelBudgetCents,
 
       currency:
-        event.currency.toUpperCase(),
+        event.currency
+          .toUpperCase(),
 
-      hotels: rankedHotels
+      hotels:
+        rankedHotels
     };
   } catch (error) {
     console.error(
