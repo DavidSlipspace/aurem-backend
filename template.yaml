@@ -391,7 +391,7 @@ Resources:
     Properties:
       FunctionName: aurem-dev-get-me
       CodeUri: .
-      Handler: src/handlers/getUser.handler
+      Handler: getUser.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
@@ -442,7 +442,7 @@ Resources:
     Properties:
       FunctionName: aurem-dev-get-cases
       CodeUri: .
-      Handler: src/handlers/getCases.handler
+      Handler: getCases.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
@@ -493,7 +493,7 @@ Resources:
     Properties:
       FunctionName: aurem-dev-get-gc-profiles
       CodeUri: .
-      Handler: src/handlers/getGcProfiles.handler
+      Handler: getGcProfiles.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
@@ -540,7 +540,7 @@ Resources:
     Properties:
       FunctionName: aurem-dev-create-gc-profile
       CodeUri: .
-      Handler: src/handlers/createGcProfile.handler
+      Handler: createGcProfile.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
@@ -587,7 +587,7 @@ Resources:
     Properties:
       FunctionName: aurem-dev-update-gc-profile
       CodeUri: .
-      Handler: src/handlers/updateGcProfile.handler
+      Handler: updateGcProfile.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
