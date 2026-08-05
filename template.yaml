@@ -45,6 +45,11 @@ Parameters:
       deployment region.
     AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
     ConstraintDescription: Enter a valid email address.
+  
+  FrontendBaseUrl:
+    Type: String
+    Default: http://localhost:5173
+    Description: Base URL used to create secure GC booking links.
 
 
 Resources:
@@ -829,6 +834,7 @@ Resources:
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
           EMAIL_SERVICE_FUNCTION_NAME: !Ref EmailServiceFunction
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
 
       Policies:
         - AWSLambdaBasicExecutionRole
@@ -852,6 +858,55 @@ Resources:
       BuildProperties:
         EntryPoints:
           - src/handlers/sendTripBookingLink.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  GetBookingLinkFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-get-booking-link
+      CodeUri: .
+      Handler: getBookingLink.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+      Events:
+        GetBookingLinkApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /public/booking-links/{token}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/getBookingLink.ts
         Minify: false
         Target: es2022
         Sourcemap: true
@@ -906,3 +961,7 @@ Outputs:
   SesSenderEmail:
     Description: Amazon SES sender identity configured for trip emails.
     Value: !Ref SesSourceEmail
+  
+  FrontendBookingBaseUrl:
+    Description: Frontend base URL used in GC booking emails.
+    Value: !Ref FrontendBaseUrl
