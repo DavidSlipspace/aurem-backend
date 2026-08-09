@@ -135,7 +135,9 @@ function normalizeDateValue(
         /^\d{4}-\d{2}-\d{2}/
       );
 
-    if (directDateMatch) {
+    if (
+      directDateMatch
+    ) {
       return directDateMatch[0];
     }
 
@@ -175,6 +177,12 @@ function normalizeAirportCode(
   )
     ? normalized
     : null;
+}
+
+function getTodayDateString(): string {
+  return new Date()
+    .toISOString()
+    .substring(0, 10);
 }
 
 function parseProviderResult(
@@ -217,6 +225,84 @@ function parseProviderResult(
   return (
     parsed as
       FlightProviderResult
+  );
+}
+
+function extractProviderMessage(
+  payload: string
+): string | null {
+  try {
+    const parsed =
+      JSON.parse(
+        payload
+      ) as {
+        errorMessage?: unknown;
+      };
+
+    if (
+      typeof parsed.errorMessage ===
+        "string" &&
+      parsed.errorMessage.trim()
+    ) {
+      return parsed.errorMessage.trim();
+    }
+  } catch {
+    // Ignore malformed provider errors
+    // and fall back to the generic message.
+  }
+
+  return null;
+}
+
+function getFriendlyProviderMessage(
+  providerMessage: string
+): string {
+  const normalized =
+    providerMessage
+      .toLowerCase();
+
+  if (
+    normalized.includes(
+      "departure_date"
+    ) &&
+    normalized.includes(
+      "must be after"
+    )
+  ) {
+    return (
+      "This trip's travel dates have already passed. " +
+      "Please contact your case manager to update the trip dates."
+    );
+  }
+
+  if (
+    normalized.includes(
+      "no offers"
+    )
+  ) {
+    return (
+      "No flights are currently available for this route and date combination. " +
+      "Please contact your case manager if the trip dates or airports need to be adjusted."
+    );
+  }
+
+  if (
+    normalized.includes(
+      "origin"
+    ) ||
+    normalized.includes(
+      "destination"
+    )
+  ) {
+    return (
+      "We could not search the configured flight route. " +
+      "Please contact your case manager to confirm the trip airports and destination."
+    );
+  }
+
+  return (
+    "We were unable to retrieve flight options for this trip. " +
+    "Please try again or contact your case manager if the problem continues."
   );
 }
 
@@ -399,6 +485,21 @@ export async function handler(
       );
     }
 
+    const today =
+      getTodayDateString();
+
+    if (
+      outboundDate <= today
+    ) {
+      return jsonResponse(
+        400,
+        {
+          message:
+            "This trip's travel dates have already passed. Please contact your case manager to update the trip dates."
+        }
+      );
+    }
+
     const totalTripBudgetCents =
       Number(
         trip.budget_filter
@@ -419,16 +520,6 @@ export async function handler(
       );
     }
 
-    /*
-     * The trip budget is split into three conceptual pieces:
-     *
-     *   1/3 outbound flight
-     *   1/3 return flight
-     *   1/3 hotel
-     *
-     * Duffel returns a single total for the full round-trip
-     * flight offer, so the flight allowance is 2/3.
-     */
     const flightBudgetCents =
       Math.max(
         1,
@@ -522,7 +613,7 @@ export async function handler(
           ? textDecoder.decode(
               invokeResponse.Payload
             )
-          : "No error payload returned.";
+          : "";
 
       console.error(
         "Flight provider returned an error",
@@ -535,8 +626,21 @@ export async function handler(
         }
       );
 
-      throw new Error(
-        `Flight provider failed: ${errorPayload}`
+      const providerMessage =
+        extractProviderMessage(
+          errorPayload
+        );
+
+      return jsonResponse(
+        400,
+        {
+          message:
+            providerMessage
+              ? getFriendlyProviderMessage(
+                  providerMessage
+                )
+              : "We were unable to retrieve flight options for this trip. Please try again or contact your case manager."
+        }
       );
     }
 
@@ -620,7 +724,7 @@ export async function handler(
         500,
         {
           message:
-            "The flight-search Lambda does not have permission to invoke the flight provider.",
+            "The flight search service is temporarily unavailable. Please try again shortly.",
 
           error:
             details.name
@@ -636,7 +740,7 @@ export async function handler(
         500,
         {
           message:
-            "The configured flight provider Lambda could not be found.",
+            "The flight search service is temporarily unavailable. Please try again shortly.",
 
           error:
             details.name
@@ -648,7 +752,7 @@ export async function handler(
       500,
       {
         message:
-          "Unable to search for flights.",
+          "We were unable to search for flights. Please try again or contact your case manager if the problem continues.",
 
         error:
           details.name
