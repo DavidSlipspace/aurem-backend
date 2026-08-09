@@ -1,11 +1,11 @@
 import type {
-  HotelProviderResult
-} from "../types/hotel";
+  FlightProviderResult
+} from "../types/flight";
 
 import {
-  isHotelProviderRequest,
-  searchStays
-} from "../providers/duffel/stays";
+  isFlightProviderRequest,
+  searchFlights
+} from "../providers/duffel/flights";
 
 function getErrorDetails(
   error: unknown
@@ -32,18 +32,18 @@ function getErrorDetails(
 
 export async function handler(
   event: unknown
-): Promise<HotelProviderResult> {
+): Promise<FlightProviderResult> {
   console.log(
-    "Hotel provider request received"
+    "Flight provider request received"
   );
 
   if (
-    !isHotelProviderRequest(
+    !isFlightProviderRequest(
       event
     )
   ) {
     throw new Error(
-      "Hotel provider received an invalid request."
+      "Flight provider received an invalid request."
     );
   }
 
@@ -51,49 +51,43 @@ export async function handler(
     process.env
       .DUFFEL_ACCESS_TOKEN;
 
-  const mapboxAccessToken =
-    process.env
-      .MAPBOX_ACCESS_TOKEN;
-
   if (!duffelAccessToken) {
     throw new Error(
       "DUFFEL_ACCESS_TOKEN is not configured."
     );
   }
 
-  if (!mapboxAccessToken) {
-    throw new Error(
-      "MAPBOX_ACCESS_TOKEN is not configured."
-    );
-  }
-
   try {
     const result =
-      await searchStays(
+      await searchFlights(
         event,
-        duffelAccessToken,
-        mapboxAccessToken
+        duffelAccessToken
       );
 
     console.log(
-      "Hotel provider search completed",
+      "Flight provider search completed",
       {
-        destination:
-          result.destination,
-
-        resolvedDestination:
+        origin:
           result
-            .resolvedDestination,
+            .originAirportCode,
+
+        destination:
+          result
+            .destinationCode,
+
+        returnAirport:
+          result
+            .returnAirportCode,
 
         returnedResultCount:
-          result.hotels.length
+          result.flights.length
       }
     );
 
     return result;
   } catch (error) {
     console.error(
-      "Hotel provider failed",
+      "Flight provider failed",
       getErrorDetails(error)
     );
 

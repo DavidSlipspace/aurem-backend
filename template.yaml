@@ -4,7 +4,7 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   Aurem backend - private RDS, Cognito, API Gateway, Lambda functions,
   SSM admin tunnel, private Lambda invocation, Amazon SES email delivery,
-  and hotel inventory search through Duffel Stays and Mapbox.
+  and travel inventory search through Duffel and Mapbox.
 
 Parameters:
   VpcId:
@@ -56,7 +56,7 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 10
-    Description: Duffel test or live access token used by the hotel provider.
+    Description: Duffel test or live access token used by travel provider functions.
 
   MapboxAccessToken:
     Type: String
@@ -1015,6 +1015,94 @@ Resources:
         External:
           - pg-native
 
+  # ---------------------------------------------------------------------------
+  # FLIGHT SEARCH FUNCTIONS
+  # ---------------------------------------------------------------------------
+
+  FlightProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-flight-provider
+      CodeUri: .
+      Handler: flightProvider.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      MemorySize: 512
+
+      Environment:
+        Variables:
+          DUFFEL_ACCESS_TOKEN: !Ref DuffelAccessToken
+
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/flightProvider.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+
+  SearchTripFlightsFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-search-trip-flights
+      CodeUri: .
+      Handler: searchTripFlights.handler
+      Runtime: nodejs22.x
+      Timeout: 35
+      MemorySize: 256
+
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          FLIGHT_PROVIDER_FUNCTION_NAME: !Ref FlightProviderFunction
+
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeFlightProvider
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt FlightProviderFunction.Arn
+
+      Events:
+        SearchTripFlightsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /public/booking-links/{token}/flights/search
+            Method: POST
+            Auth:
+              Authorizer: NONE
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/searchTripFlights.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
 Outputs:
   AdminInstanceId:
     Description: EC2 instance ID used for the SSM database tunnel.
@@ -1063,6 +1151,14 @@ Outputs:
   SearchTripHotelsFunctionName:
     Description: Private Lambda that validates booking links and initiates hotel searches.
     Value: !Ref SearchTripHotelsFunction
+
+  FlightProviderFunctionName:
+    Description: Public Lambda that resolves flight destinations and searches Duffel Flights.
+    Value: !Ref FlightProviderFunction
+
+  SearchTripFlightsFunctionName:
+    Description: Private Lambda that validates booking links and initiates flight searches.
+    Value: !Ref SearchTripFlightsFunction
 
   SsmVpcEndpointId:
     Description: Private interface endpoint used by the SSM administration instance.
