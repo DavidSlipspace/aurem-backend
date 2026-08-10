@@ -65,21 +65,15 @@ Parameters:
     Description: Mapbox access token used to geocode trip destinations.
 
 Resources:
-  # ---------------------------------------------------------------------------
-  # SECURITY GROUPS
-  # ---------------------------------------------------------------------------
-
   ApplicationSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Aurem development application security group for Lambda functions and the SSM administration instance.
       VpcId: !Ref VpcId
-
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
           Description: Allow outbound database and HTTPS traffic.
-
       Tags:
         - Key: Name
           Value: aurem-dev-application-sg
@@ -95,14 +89,12 @@ Resources:
     Properties:
       GroupDescription: Aurem development private PostgreSQL security group.
       VpcId: !Ref VpcId
-
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 5432
           ToPort: 5432
           SourceSecurityGroupId: !Ref ApplicationSecurityGroup
           Description: Allow PostgreSQL connections from Aurem Lambda functions and the SSM administration instance.
-
       Tags:
         - Key: Name
           Value: aurem-dev-db-sg
@@ -118,14 +110,12 @@ Resources:
     Properties:
       GroupDescription: Allows Aurem application resources to connect privately to AWS interface VPC endpoints.
       VpcId: !Ref VpcId
-
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           SourceSecurityGroupId: !Ref ApplicationSecurityGroup
           Description: HTTPS from Aurem Lambda and administration resources.
-
       Tags:
         - Key: Name
           Value: aurem-dev-vpc-endpoints-sg
@@ -188,19 +178,13 @@ Resources:
       SecurityGroupIds:
         - !Ref VpcEndpointSecurityGroup
 
-  # ---------------------------------------------------------------------------
-  # DATABASE
-  # ---------------------------------------------------------------------------
-
   DatabaseSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: Aurem development database subnet group.
-
       SubnetIds:
         - !Ref SubnetIdA
         - !Ref SubnetIdB
-
       Tags:
         - Key: Name
           Value: aurem-dev-db-subnet-group
@@ -232,7 +216,6 @@ Resources:
       BackupRetentionPeriod: 1
       DeletionProtection: false
       StorageEncrypted: true
-
       Tags:
         - Key: Name
           Value: aurem-dev-db
@@ -245,15 +228,10 @@ Resources:
         - Key: Owner
           Value: David
 
-  # ---------------------------------------------------------------------------
-  # SSM ADMINISTRATION INSTANCE
-  # ---------------------------------------------------------------------------
-
   AdminInstanceRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: aurem-dev-admin-instance-role
-
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -263,10 +241,8 @@ Resources:
                 - ec2.amazonaws.com
             Action:
               - sts:AssumeRole
-
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-
       Tags:
         - Key: Application
           Value: Aurem
@@ -293,10 +269,8 @@ Resources:
       ImageId: ami-0c02fb55956c7d316
       IamInstanceProfile: !Ref AdminInstanceProfile
       SubnetId: !Ref SubnetIdA
-
       SecurityGroupIds:
         - !Ref ApplicationSecurityGroup
-
       Tags:
         - Key: Name
           Value: aurem-dev-admin-ssm-instance
@@ -307,27 +281,19 @@ Resources:
         - Key: Component
           Value: AdminTunnel
 
-  # ---------------------------------------------------------------------------
-  # COGNITO
-  # ---------------------------------------------------------------------------
-
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: aurem-dev-user-pool
-
       UsernameAttributes:
         - email
-
       AutoVerifiedAttributes:
         - email
-
       Schema:
         - Name: email
           AttributeDataType: String
           Required: true
           Mutable: true
-
         - Name: name
           AttributeDataType: String
           Required: true
@@ -339,33 +305,24 @@ Resources:
       ClientName: aurem-dev-frontend-client
       UserPoolId: !Ref UserPool
       GenerateSecret: false
-
       ExplicitAuthFlows:
         - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
-
       PreventUserExistenceErrors: ENABLED
-
-  # ---------------------------------------------------------------------------
-  # API GATEWAY
-  # ---------------------------------------------------------------------------
 
   AuremApi:
     Type: AWS::Serverless::Api
     Properties:
       Name: aurem-dev-api
       StageName: dev
-
       Cors:
         AllowMethods: "'GET,POST,PUT,OPTIONS'"
         AllowHeaders: "'Authorization,Content-Type'"
         AllowOrigin: "'http://localhost:5173'"
-
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
         AddDefaultAuthorizerToCorsPreflight: false
-
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt UserPool.Arn
@@ -375,7 +332,6 @@ Resources:
     Properties:
       RestApiId: !Ref AuremApi
       ResponseType: DEFAULT_4XX
-
       ResponseParameters:
         gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
@@ -386,15 +342,10 @@ Resources:
     Properties:
       RestApiId: !Ref AuremApi
       ResponseType: DEFAULT_5XX
-
       ResponseParameters:
         gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
-
-  # ---------------------------------------------------------------------------
-  # USER FUNCTIONS
-  # ---------------------------------------------------------------------------
 
   GetUserFunction:
     Type: AWS::Serverless::Function
@@ -405,14 +356,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -420,10 +369,8 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
       Events:
         GetUser:
           Type: Api
@@ -431,7 +378,6 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /getUser
             Method: GET
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -443,10 +389,6 @@ Resources:
         External:
           - pg-native
 
-  # ---------------------------------------------------------------------------
-  # CASE FUNCTIONS
-  # ---------------------------------------------------------------------------
-
   GetCasesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -456,14 +398,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -471,10 +411,8 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
       Events:
         GetCases:
           Type: Api
@@ -482,7 +420,6 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /cases
             Method: GET
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -494,10 +431,6 @@ Resources:
         External:
           - pg-native
 
-  # ---------------------------------------------------------------------------
-  # GC PROFILE FUNCTIONS
-  # ---------------------------------------------------------------------------
-
   GetGcProfilesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -507,14 +440,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -522,10 +453,8 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
       Events:
         GetGcProfiles:
           Type: Api
@@ -533,7 +462,6 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /gc-profiles
             Method: GET
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -554,14 +482,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -569,10 +495,8 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
       Events:
         CreateGcProfile:
           Type: Api
@@ -580,7 +504,6 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /gc-profiles
             Method: POST
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -601,14 +524,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -616,10 +537,8 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
       Events:
         UpdateGcProfile:
           Type: Api
@@ -627,7 +546,6 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /gc-profiles/{id}
             Method: PUT
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -639,10 +557,6 @@ Resources:
         External:
           - pg-native
 
-  # ---------------------------------------------------------------------------
-  # TRIP FUNCTIONS
-  # ---------------------------------------------------------------------------
-
   GetTripsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -652,14 +566,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -667,10 +579,8 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
       Events:
         GetTrips:
           Type: Api
@@ -678,7 +588,6 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /trips
             Method: GET
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -699,14 +608,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -714,10 +621,8 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
       Events:
         CreateTrip:
           Type: Api
@@ -725,7 +630,6 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /trips
             Method: POST
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -746,14 +650,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -761,10 +663,8 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
       Events:
         UpdateTrip:
           Type: Api
@@ -772,7 +672,6 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /trips/{id}
             Method: PUT
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -784,10 +683,6 @@ Resources:
         External:
           - pg-native
 
-  # ---------------------------------------------------------------------------
-  # EMAIL AND BOOKING-LINK FUNCTIONS
-  # ---------------------------------------------------------------------------
-
   EmailServiceFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -797,11 +692,9 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       Environment:
         Variables:
           SES_SOURCE_EMAIL: !Ref SesSourceEmail
-
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -810,7 +703,6 @@ Resources:
               Action:
                 - ses:SendEmail
               Resource: "*"
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -831,14 +723,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 15
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -848,7 +738,6 @@ Resources:
           DB_PASSWORD: !Ref DbPassword
           EMAIL_SERVICE_FUNCTION_NAME: !Ref EmailServiceFunction
           FRONTEND_BASE_URL: !Ref FrontendBaseUrl
-
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -857,7 +746,6 @@ Resources:
               Action:
                 - lambda:InvokeFunction
               Resource: !GetAtt EmailServiceFunction.Arn
-
       Events:
         SendTripBookingLinkApi:
           Type: Api
@@ -865,7 +753,6 @@ Resources:
             RestApiId: !Ref AuremApi
             Path: /trips/{id}/booking-link
             Method: POST
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -886,14 +773,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -901,10 +786,8 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
       Events:
         GetBookingLinkApi:
           Type: Api
@@ -914,7 +797,6 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -926,9 +808,49 @@ Resources:
         External:
           - pg-native
 
-  # ---------------------------------------------------------------------------
-  # HOTEL SEARCH FUNCTIONS
-  # ---------------------------------------------------------------------------
+  SaveTripSelectionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-save-trip-selections
+      CodeUri: .
+      Handler: saveTripSelections.handler
+      Runtime: nodejs22.x
+      Timeout: 15
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        SaveTripSelectionsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /public/booking-links/{token}/selections
+            Method: POST
+            Auth:
+              Authorizer: NONE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/saveTripSelections.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
 
   HotelProviderFunction:
     Type: AWS::Serverless::Function
@@ -939,15 +861,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 25
       MemorySize: 512
-
       Environment:
         Variables:
           DUFFEL_ACCESS_TOKEN: !Ref DuffelAccessToken
           MAPBOX_ACCESS_TOKEN: !Ref MapboxAccessToken
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -968,14 +887,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 28
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -984,7 +901,6 @@ Resources:
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
           HOTEL_PROVIDER_FUNCTION_NAME: !Ref HotelProviderFunction
-
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -993,7 +909,6 @@ Resources:
               Action:
                 - lambda:InvokeFunction
               Resource: !GetAtt HotelProviderFunction.Arn
-
       Events:
         SearchTripHotelsApi:
           Type: Api
@@ -1003,7 +918,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -1015,10 +929,6 @@ Resources:
         External:
           - pg-native
 
-  # ---------------------------------------------------------------------------
-  # FLIGHT SEARCH FUNCTIONS
-  # ---------------------------------------------------------------------------
-
   FlightProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1028,14 +938,11 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       MemorySize: 512
-
       Environment:
         Variables:
           DUFFEL_ACCESS_TOKEN: !Ref DuffelAccessToken
-
       Policies:
         - AWSLambdaBasicExecutionRole
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -1056,14 +963,12 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 35
       MemorySize: 256
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref ApplicationSecurityGroup
         SubnetIds:
           - !Ref SubnetIdA
           - !Ref SubnetIdB
-
       Environment:
         Variables:
           DB_HOST: !GetAtt AppDatabase.Endpoint.Address
@@ -1072,7 +977,6 @@ Resources:
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
           FLIGHT_PROVIDER_FUNCTION_NAME: !Ref FlightProviderFunction
-
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -1081,7 +985,6 @@ Resources:
               Action:
                 - lambda:InvokeFunction
               Resource: !GetAtt FlightProviderFunction.Arn
-
       Events:
         SearchTripFlightsApi:
           Type: Api
@@ -1091,7 +994,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -1143,6 +1045,10 @@ Outputs:
   EmailServiceFunctionName:
     Description: Reusable non-VPC Lambda function that sends transactional email through Amazon SES.
     Value: !Ref EmailServiceFunction
+
+  SaveTripSelectionsFunctionName:
+    Description: Saves the GC selected flight and hotel to the trip.
+    Value: !Ref SaveTripSelectionsFunction
 
   HotelProviderFunctionName:
     Description: Public Lambda that geocodes destinations and searches Duffel Stays.
