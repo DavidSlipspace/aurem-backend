@@ -8,10 +8,17 @@ import {
   LambdaClient
 } from "@aws-sdk/client-lambda";
 
-import { createHash } from "node:crypto";
+import {
+  createHash
+} from "node:crypto";
 
-import { getPool } from "../db/pool";
-import { jsonResponse } from "../common/response";
+import {
+  getPool
+} from "../db/pool";
+
+import {
+  jsonResponse
+} from "../common/response";
 
 import type {
   HotelProviderRequest,
@@ -25,11 +32,21 @@ type TripHotelSearchRow = {
   gc_first_name: string;
   gc_last_name: string;
 
-  outbound_date: Date | string;
-  return_date: Date | string;
+  outbound_date:
+    | Date
+    | string;
 
-  destination_city: string | null;
-  destination_address: string | null;
+  return_date:
+    | Date
+    | string;
+
+  destination_city:
+    | string
+    | null;
+
+  destination_address:
+    | string
+    | null;
 
   hotel_proximity_preference:
     | string
@@ -40,28 +57,67 @@ type TripHotelSearchRow = {
     | null;
 
   budget_filter: number;
+
   companion_traveler: boolean;
 };
 
-const lambdaClient = new LambdaClient({});
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
+type ProviderErrorPayload = {
+  errorType?: unknown;
+  errorMessage?: unknown;
+};
 
-const DEFAULT_CURRENCY = "USD";
-const MAXIMUM_HOTEL_RESULTS = 10;
+type TravelErrorCode =
+  | "BOOKING_LINK_REQUIRED"
+  | "BOOKING_LINK_INVALID"
+  | "BOOKING_LINK_EXPIRED"
+  | "HOTEL_PROVIDER_NOT_CONFIGURED"
+  | "DESTINATION_MISSING"
+  | "DESTINATION_NOT_FOUND"
+  | "INVALID_TRIP_DATES"
+  | "PAST_TRAVEL_DATE"
+  | "INVALID_TRIP_BUDGET"
+  | "INVALID_STAR_RATING"
+  | "STAYS_NOT_ENABLED"
+  | "NO_HOTELS_FOUND"
+  | "PROVIDER_VALIDATION_ERROR"
+  | "PROVIDER_UNAVAILABLE"
+  | "INTERNAL_ERROR";
 
-function hashToken(token: string): string {
-  return createHash("sha256")
+const lambdaClient =
+  new LambdaClient({});
+
+const textEncoder =
+  new TextEncoder();
+
+const textDecoder =
+  new TextDecoder();
+
+const DEFAULT_CURRENCY =
+  "USD";
+
+const MAXIMUM_HOTEL_RESULTS =
+  10;
+
+function hashToken(
+  token: string
+): string {
+  return createHash(
+    "sha256"
+  )
     .update(token)
     .digest("hex");
 }
 
-function getErrorDetails(error: unknown): {
+function getErrorDetails(
+  error: unknown
+): {
   name: string;
   message: string;
   stack?: string;
 } {
-  if (error instanceof Error) {
+  if (
+    error instanceof Error
+  ) {
     return {
       name: error.name,
       message: error.message,
@@ -75,11 +131,37 @@ function getErrorDetails(error: unknown): {
   };
 }
 
+function errorResponse(
+  statusCode: number,
+  code: TravelErrorCode,
+  title: string,
+  message: string,
+  canRetry = false
+): APIGatewayProxyResult {
+  return jsonResponse(
+    statusCode,
+    {
+      code,
+      title,
+      message,
+      canRetry
+    }
+  );
+}
+
 function normalizeDateValue(
-  value: Date | string
+  value:
+    | Date
+    | string
 ): string {
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) {
+  if (
+    value instanceof Date
+  ) {
+    if (
+      Number.isNaN(
+        value.getTime()
+      )
+    ) {
       throw new Error(
         "The trip contains an invalid date."
       );
@@ -90,8 +172,11 @@ function normalizeDateValue(
       .substring(0, 10);
   }
 
-  if (typeof value === "string") {
-    const normalizedValue = value.trim();
+  if (
+    typeof value === "string"
+  ) {
+    const normalizedValue =
+      value.trim();
 
     if (!normalizedValue) {
       throw new Error(
@@ -104,12 +189,16 @@ function normalizeDateValue(
         /^\d{4}-\d{2}-\d{2}/
       );
 
-    if (directDateMatch) {
+    if (
+      directDateMatch
+    ) {
       return directDateMatch[0];
     }
 
     const parsedDate =
-      new Date(normalizedValue);
+      new Date(
+        normalizedValue
+      );
 
     if (
       Number.isNaN(
@@ -131,21 +220,55 @@ function normalizeDateValue(
   );
 }
 
+function getTodayDateString(): string {
+  return new Date()
+    .toISOString()
+    .substring(0, 10);
+}
+
+function formatDateForMessage(
+  value: string
+): string {
+  const date =
+    new Date(
+      `${value}T12:00:00Z`
+    );
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC"
+    }
+  ).format(date);
+}
+
 function buildDestination(
   row: TripHotelSearchRow
-): string {
+): string | null {
   const address =
-    row.destination_address?.trim();
+    row
+      .destination_address
+      ?.trim();
 
   const city =
-    row.destination_city?.trim();
+    row
+      .destination_city
+      ?.trim();
 
-  if (address && city) {
+  if (
+    address &&
+    city
+  ) {
     const lowerAddress =
-      address.toLowerCase();
+      address
+        .toLowerCase();
 
     const lowerCity =
-      city.toLowerCase();
+      city
+        .toLowerCase();
 
     return lowerAddress.includes(
       lowerCity
@@ -162,42 +285,57 @@ function buildDestination(
     return city;
   }
 
-  throw new Error(
-    "The trip does not have a destination city or address."
-  );
+  return null;
 }
 
 function getRadiusKilometers(
-  preference: string | null
+  preference:
+    | string
+    | null
 ): number {
   const normalized =
     preference
       ?.trim()
-      .toLowerCase() ?? "";
+      .toLowerCase() ??
+    "";
 
   if (
-    normalized.includes("walking")
+    normalized.includes(
+      "walking"
+    )
   ) {
     return 2;
   }
 
   if (
-    normalized.includes("1 mile") ||
-    normalized.includes("one mile")
+    normalized.includes(
+      "1 mile"
+    ) ||
+    normalized.includes(
+      "one mile"
+    )
   ) {
     return 2;
   }
 
   if (
-    normalized.includes("5 mile") ||
-    normalized.includes("five mile")
+    normalized.includes(
+      "5 mile"
+    ) ||
+    normalized.includes(
+      "five mile"
+    )
   ) {
     return 8;
   }
 
   if (
-    normalized.includes("10 mile") ||
-    normalized.includes("ten mile")
+    normalized.includes(
+      "10 mile"
+    ) ||
+    normalized.includes(
+      "ten mile"
+    )
   ) {
     return 16;
   }
@@ -214,7 +352,9 @@ function getRadiusKilometers(
 }
 
 function parseHotelProviderResult(
-  payload: Uint8Array | undefined
+  payload:
+    | Uint8Array
+    | undefined
 ): HotelProviderResult {
   if (!payload) {
     throw new Error(
@@ -223,11 +363,14 @@ function parseHotelProviderResult(
   }
 
   const decodedPayload =
-    textDecoder.decode(payload);
+    textDecoder.decode(
+      payload
+    );
 
-  const parsedPayload = JSON.parse(
-    decodedPayload
-  ) as Partial<HotelProviderResult>;
+  const parsedPayload =
+    JSON.parse(
+      decodedPayload
+    ) as Partial<HotelProviderResult>;
 
   if (
     !Array.isArray(
@@ -248,7 +391,276 @@ function parseHotelProviderResult(
     );
   }
 
-  return parsedPayload as HotelProviderResult;
+  return (
+    parsedPayload as
+      HotelProviderResult
+  );
+}
+
+function parseProviderError(
+  payload: string
+): {
+  errorType:
+    | string
+    | null;
+
+  errorMessage:
+    | string
+    | null;
+} {
+  if (
+    !payload.trim()
+  ) {
+    return {
+      errorType: null,
+      errorMessage: null
+    };
+  }
+
+  try {
+    const parsed =
+      JSON.parse(
+        payload
+      ) as ProviderErrorPayload;
+
+    return {
+      errorType:
+        typeof parsed.errorType ===
+          "string"
+          ? parsed.errorType
+          : null,
+
+      errorMessage:
+        typeof parsed.errorMessage ===
+          "string"
+          ? parsed.errorMessage
+          : null
+    };
+  } catch {
+    return {
+      errorType: null,
+      errorMessage:
+        payload
+    };
+  }
+}
+
+function providerErrorResponse(
+  providerErrorType:
+    | string
+    | null,
+
+  providerMessage:
+    | string
+    | null
+): APIGatewayProxyResult {
+  const message =
+    providerMessage
+      ?.trim() ??
+    "";
+
+  const normalized =
+    message
+      .toLowerCase();
+
+  /*
+   * Duffel Stays access is enabled separately
+   * from Flights. A 403 or permission-related
+   * error should not invite the traveler to retry.
+   */
+  if (
+    normalized.includes(
+      "403"
+    ) ||
+    normalized.includes(
+      "forbidden"
+    ) ||
+    normalized.includes(
+      "insufficient_permissions"
+    ) ||
+    normalized.includes(
+      "insufficient permissions"
+    ) ||
+    normalized.includes(
+      "not permitted"
+    ) ||
+    normalized.includes(
+      "does not have permission"
+    )
+  ) {
+    return errorResponse(
+      503,
+      "STAYS_NOT_ENABLED",
+      "Hotel search is not available yet",
+      "Hotel search is currently unavailable for this trip because the travel provider has not enabled hotel access for this environment. Your flight selections are not affected. Please contact your case manager for assistance.",
+      false
+    );
+  }
+
+  if (
+    normalized.includes(
+      "check_in_date"
+    ) &&
+    (
+      normalized.includes(
+        "must be after"
+      ) ||
+      normalized.includes(
+        "past"
+      )
+    )
+  ) {
+    return errorResponse(
+      400,
+      "PAST_TRAVEL_DATE",
+      "These hotel dates have already passed",
+      "Hotels can only be searched for future travel. Please contact your case manager to update the trip dates.",
+      false
+    );
+  }
+
+  if (
+    normalized.includes(
+      "check_out_date"
+    ) &&
+    normalized.includes(
+      "after"
+    )
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_TRIP_DATES",
+      "The hotel dates need to be corrected",
+      "The hotel checkout date must be after the check-in date. Please contact your case manager to update the trip dates.",
+      false
+    );
+  }
+
+  /*
+   * Mapbox destination resolution failures.
+   */
+  if (
+    normalized.includes(
+      "could not locate"
+    ) ||
+    normalized.includes(
+      "could not geocode"
+    ) ||
+    normalized.includes(
+      "destination coordinates"
+    ) ||
+    normalized.includes(
+      "mapbox could not"
+    )
+  ) {
+    return errorResponse(
+      400,
+      "DESTINATION_NOT_FOUND",
+      "We couldn't identify the hotel destination",
+      message ||
+        "The destination on this trip could not be located. Please contact your case manager to confirm the destination city or address.",
+      false
+    );
+  }
+
+  if (
+    normalized.includes(
+      "no results"
+    ) ||
+    normalized.includes(
+      "no hotels"
+    ) ||
+    normalized.includes(
+      "no accommodations"
+    )
+  ) {
+    return errorResponse(
+      404,
+      "NO_HOTELS_FOUND",
+      "No hotels were found",
+      "No available hotels matched the trip dates, destination, and current hotel preferences. Please contact your case manager if the trip details need to be adjusted.",
+      false
+    );
+  }
+
+  /*
+   * Network/provider failures where retrying could
+   * reasonably produce a different result.
+   */
+  if (
+    normalized.includes(
+      "timeout"
+    ) ||
+    normalized.includes(
+      "timed out"
+    ) ||
+    normalized.includes(
+      "temporarily unavailable"
+    ) ||
+    normalized.includes(
+      "service unavailable"
+    ) ||
+    normalized.includes(
+      "status 500"
+    ) ||
+    normalized.includes(
+      "status 502"
+    ) ||
+    normalized.includes(
+      "status 503"
+    ) ||
+    normalized.includes(
+      "status 504"
+    )
+  ) {
+    return errorResponse(
+      503,
+      "PROVIDER_UNAVAILABLE",
+      "Hotel search is temporarily unavailable",
+      "The hotel search service did not respond successfully. Please try again.",
+      true
+    );
+  }
+
+  /*
+   * If Duffel explicitly rejects the request for some
+   * other validation reason, preserve that detail.
+   */
+  if (
+    providerErrorType ===
+      "DuffelApiError" &&
+    message
+  ) {
+    return errorResponse(
+      400,
+      "PROVIDER_VALIDATION_ERROR",
+      "We couldn't complete the hotel search",
+      message,
+      false
+    );
+  }
+
+  /*
+   * Preserve useful provider text if we have it,
+   * while still classifying the failure.
+   */
+  if (message) {
+    return errorResponse(
+      502,
+      "PROVIDER_UNAVAILABLE",
+      "We couldn't complete the hotel search",
+      message,
+      true
+    );
+  }
+
+  return errorResponse(
+    502,
+    "PROVIDER_UNAVAILABLE",
+    "Hotel search is temporarily unavailable",
+    "We couldn't retrieve hotel options right now. Please try again.",
+    true
+  );
 }
 
 export async function handler(
@@ -256,20 +668,31 @@ export async function handler(
 ): Promise<APIGatewayProxyResult> {
   try {
     const token =
-      event.pathParameters?.token?.trim();
+      event
+        .pathParameters
+        ?.token
+        ?.trim();
 
     if (!token) {
-      return jsonResponse(400, {
-        message:
-          "Booking token is required."
-      });
+      return errorResponse(
+        400,
+        "BOOKING_LINK_REQUIRED",
+        "Booking link required",
+        "A valid booking link is required to search for hotels.",
+        false
+      );
     }
 
-    if (token.length > 200) {
-      return jsonResponse(400, {
-        message:
-          "Booking token is invalid."
-      });
+    if (
+      token.length > 200
+    ) {
+      return errorResponse(
+        400,
+        "BOOKING_LINK_INVALID",
+        "Booking link invalid",
+        "This booking link is not valid. Please use the most recent link sent by your case manager.",
+        false
+      );
     }
 
     const hotelProviderFunctionName =
@@ -279,10 +702,13 @@ export async function handler(
     if (
       !hotelProviderFunctionName
     ) {
-      return jsonResponse(500, {
-        message:
-          "The hotel provider has not been configured."
-      });
+      return errorResponse(
+        500,
+        "HOTEL_PROVIDER_NOT_CONFIGURED",
+        "Hotel search is unavailable",
+        "The hotel search service has not been configured correctly.",
+        false
+      );
     }
 
     const tokenHash =
@@ -316,7 +742,8 @@ export async function handler(
             FROM booking_links bl
 
             JOIN trips t
-              ON t.id = bl.trip_id
+              ON t.id =
+                bl.trip_id
 
             JOIN gc_profiles gp
               ON gp.id =
@@ -324,8 +751,13 @@ export async function handler(
 
             WHERE
               bl.token_hash = $1
-              AND bl.revoked_at IS NULL
-              AND bl.expires_at >
+
+              AND
+                bl.revoked_at
+                IS NULL
+
+              AND
+                bl.expires_at >
                 CURRENT_TIMESTAMP
 
             LIMIT 1;
@@ -333,17 +765,33 @@ export async function handler(
           [tokenHash]
         );
 
-    const trip = result.rows[0];
+    const trip =
+      result.rows[0];
 
     if (!trip) {
-      return jsonResponse(404, {
-        message:
-          "This booking link is invalid, expired, or has been replaced."
-      });
+      return errorResponse(
+        404,
+        "BOOKING_LINK_EXPIRED",
+        "This booking link is no longer available",
+        "The link may have expired or been replaced. Please contact your case manager for a new booking link.",
+        false
+      );
     }
 
     const destination =
-      buildDestination(trip);
+      buildDestination(
+        trip
+      );
+
+    if (!destination) {
+      return errorResponse(
+        400,
+        "DESTINATION_MISSING",
+        "Destination information is missing",
+        "This trip does not have a destination city or address configured. Please contact your case manager to update the trip.",
+        false
+      );
+    }
 
     const checkInDate =
       normalizeDateValue(
@@ -359,10 +807,37 @@ export async function handler(
       checkOutDate <=
       checkInDate
     ) {
-      return jsonResponse(400, {
-        message:
-          "The trip return date must be after the outbound date."
-      });
+      return errorResponse(
+        400,
+        "INVALID_TRIP_DATES",
+        "The hotel dates need to be corrected",
+        `The checkout date (${formatDateForMessage(
+          checkOutDate
+        )}) must be after the check-in date (${formatDateForMessage(
+          checkInDate
+        )}). Please contact your case manager to update the trip.`,
+        false
+      );
+    }
+
+    const today =
+      getTodayDateString();
+
+    if (
+      checkInDate <=
+      today
+    ) {
+      return errorResponse(
+        400,
+        "PAST_TRAVEL_DATE",
+        "These hotel dates have already passed",
+        `This trip is scheduled for ${formatDateForMessage(
+          checkInDate
+        )} through ${formatDateForMessage(
+          checkOutDate
+        )}. Hotel searches can only be performed for future travel. Please contact your case manager to update the trip dates.`,
+        false
+      );
     }
 
     const totalTripBudgetCents =
@@ -376,26 +851,33 @@ export async function handler(
       ) ||
       totalTripBudgetCents <= 0
     ) {
-      return jsonResponse(400, {
-        message:
-          "The trip does not have a valid travel budget."
-      });
+      return errorResponse(
+        400,
+        "INVALID_TRIP_BUDGET",
+        "The trip budget needs to be corrected",
+        "This trip does not have a valid positive travel budget. Please contact your case manager to update the trip.",
+        false
+      );
     }
 
     const hotelBudgetCents =
       Math.max(
         1,
+
         Math.floor(
-          totalTripBudgetCents / 3
+          totalTripBudgetCents /
+            3
         )
       );
 
     const minimumStarRating =
-      trip.minimum_hotel_star_rating ===
-        null
+      trip
+        .minimum_hotel_star_rating ===
+      null
         ? undefined
         : Number(
-            trip.minimum_hotel_star_rating
+            trip
+              .minimum_hotel_star_rating
           );
 
     if (
@@ -405,14 +887,19 @@ export async function handler(
         !Number.isInteger(
           minimumStarRating
         ) ||
-        minimumStarRating < 1 ||
-        minimumStarRating > 5
+        minimumStarRating <
+          1 ||
+        minimumStarRating >
+          5
       )
     ) {
-      return jsonResponse(400, {
-        message:
-          "The trip has an invalid minimum hotel star rating."
-      });
+      return errorResponse(
+        400,
+        "INVALID_STAR_RATING",
+        "The hotel preference needs to be corrected",
+        "The minimum hotel star rating must be between 1 and 5. Please contact your case manager to update the trip.",
+        false
+      );
     }
 
     const providerRequest:
@@ -423,7 +910,8 @@ export async function handler(
       checkOutDate,
 
       adultGuests:
-        trip.companion_traveler
+        trip
+          .companion_traveler
           ? 2
           : 1,
 
@@ -452,7 +940,8 @@ export async function handler(
         hotelProviderFunctionName,
 
         tripReferenceId:
-          trip.trip_reference_id,
+          trip
+            .trip_reference_id,
 
         destination,
 
@@ -499,14 +988,16 @@ export async function handler(
       );
 
     if (
-      invokeResponse.FunctionError
+      invokeResponse
+        .FunctionError
     ) {
       const errorPayload =
         invokeResponse.Payload
           ? textDecoder.decode(
-              invokeResponse.Payload
+              invokeResponse
+                .Payload
             )
-          : "No error payload returned.";
+          : "";
 
       console.error(
         "Hotel provider returned an error",
@@ -519,8 +1010,17 @@ export async function handler(
         }
       );
 
-      throw new Error(
-        `Hotel provider failed: ${errorPayload}`
+      const providerError =
+        parseProviderError(
+          errorPayload
+        );
+
+      return providerErrorResponse(
+        providerError
+          .errorType,
+
+        providerError
+          .errorMessage
       );
     }
 
@@ -529,6 +1029,27 @@ export async function handler(
         invokeResponse.Payload
       );
 
+    /*
+     * A successful provider request with zero inventory
+     * is a business result, not a system failure.
+     *
+     * Return a structured 404 so the portal can explain
+     * that retrying the exact same search is not useful.
+     */
+    if (
+      providerResult
+        .hotels
+        .length === 0
+    ) {
+      return errorResponse(
+        404,
+        "NO_HOTELS_FOUND",
+        "No hotels were found",
+        `No available hotels matched the current trip dates and hotel preferences near ${providerResult.resolvedDestination}. Please contact your case manager if the destination, dates, star rating, or proximity preference should be adjusted.`,
+        false
+      );
+    }
+
     const gcName =
       `${trip.gc_first_name} ` +
       `${trip.gc_last_name}`;
@@ -536,7 +1057,8 @@ export async function handler(
     const response:
       SearchTripHotelsResult = {
       tripReferenceId:
-        trip.trip_reference_id,
+        trip
+          .trip_reference_id,
 
       gcName:
         gcName.trim(),
@@ -558,7 +1080,8 @@ export async function handler(
           .adultGuests,
 
       rooms:
-        providerResult.rooms,
+        providerResult
+          .rooms,
 
       radiusKilometers:
         providerResult
@@ -569,13 +1092,16 @@ export async function handler(
           .minimumStarRating,
 
       totalTripBudgetCents,
+
       hotelBudgetCents,
 
       currency:
-        providerResult.currency,
+        providerResult
+          .currency,
 
       hotels:
-        providerResult.hotels
+        providerResult
+          .hotels
     };
 
     return jsonResponse(
@@ -584,7 +1110,9 @@ export async function handler(
     );
   } catch (error) {
     const errorDetails =
-      getErrorDetails(error);
+      getErrorDetails(
+        error
+      );
 
     console.error(
       "POST /public/booking-links/{token}/hotels/search failed",
@@ -595,34 +1123,34 @@ export async function handler(
       errorDetails.name ===
       "AccessDeniedException"
     ) {
-      return jsonResponse(500, {
-        message:
-          "The hotel-search Lambda does not have permission to invoke the hotel provider.",
-
-        error:
-          errorDetails.name
-      });
+      return errorResponse(
+        503,
+        "PROVIDER_UNAVAILABLE",
+        "Hotel search is temporarily unavailable",
+        "The hotel search service is temporarily unavailable. Please try again shortly.",
+        true
+      );
     }
 
     if (
       errorDetails.name ===
       "ResourceNotFoundException"
     ) {
-      return jsonResponse(500, {
-        message:
-          "The configured hotel provider Lambda could not be found.",
-
-        error:
-          errorDetails.name
-      });
+      return errorResponse(
+        503,
+        "PROVIDER_UNAVAILABLE",
+        "Hotel search is temporarily unavailable",
+        "The hotel search service is temporarily unavailable. Please try again shortly.",
+        true
+      );
     }
 
-    return jsonResponse(500, {
-      message:
-        "Unable to search for hotels.",
-
-      error:
-        errorDetails.name
-    });
+    return errorResponse(
+      500,
+      "INTERNAL_ERROR",
+      "Something went wrong",
+      "We couldn't complete the hotel search because of an unexpected error. Please try again. If the problem continues, contact your case manager.",
+      true
+    );
   }
 }
