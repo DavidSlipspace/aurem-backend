@@ -12,6 +12,8 @@
   "license": "ISC",
   "description": "Backend service for the Slipspace application.",
   "dependencies": {
+    "@aws-sdk/client-lambda": "^3.1095.0",
+    "@aws-sdk/client-sesv2": "^3.1095.0",
     "pg": "^8.21.0"
   },
   "devDependencies": {
