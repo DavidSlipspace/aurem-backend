@@ -87,7 +87,17 @@ type DuffelOffer = {
 
 type DuffelOfferRequestResponse = {
   data?: {
-    offers?: DuffelOffer[];
+    id?: unknown;
+  };
+};
+
+type DuffelOffersResponse = {
+  data?: DuffelOffer[];
+
+  meta?: {
+    limit?: unknown;
+    after?: unknown;
+    before?: unknown;
   };
 };
 
@@ -267,8 +277,9 @@ function getPlacePriority(
       .toLowerCase();
 
   const name =
-    getString(place.name)
-      ?.toLowerCase();
+    getString(
+      place.name
+    )?.toLowerCase();
 
   const cityName =
     getString(
@@ -281,7 +292,8 @@ function getPlacePriority(
     )?.toLowerCase();
 
   if (
-    name === normalizedQuery &&
+    name ===
+      normalizedQuery &&
     place.type === "city"
   ) {
     return 0;
@@ -303,7 +315,8 @@ function getPlacePriority(
   }
 
   if (
-    name === normalizedQuery
+    name ===
+    normalizedQuery
   ) {
     return 3;
   }
@@ -403,6 +416,7 @@ async function resolveDestinationPlace(
 
   return {
     name,
+
     code:
       code.toUpperCase()
   };
@@ -412,7 +426,9 @@ function normalizeSegment(
   segment: DuffelSegment
 ): FlightSegment | null {
   const id =
-    getString(segment.id);
+    getString(
+      segment.id
+    );
 
   const originAirportCode =
     getString(
@@ -531,6 +547,7 @@ function normalizeSegment(
       destinationAirportCode,
 
     departingAt,
+
     arrivingAt,
 
     durationMinutes:
@@ -573,7 +590,8 @@ function normalizeJourney(
     !Array.isArray(
       slice.segments
     ) ||
-    slice.segments.length === 0
+    slice.segments.length ===
+      0
   ) {
     return null;
   }
@@ -638,7 +656,9 @@ function normalizeOffer(
   request: FlightProviderRequest
 ): FlightOption | null {
   const offerId =
-    getString(offer.id);
+    getString(
+      offer.id
+    );
 
   const totalAmountCents =
     getAmountCents(
@@ -809,6 +829,151 @@ function rankFlights(
   );
 }
 
+async function createOfferRequest(
+  request: FlightProviderRequest,
+  destinationCode: string,
+  accessToken: string
+): Promise<string> {
+  const passengers =
+    Array.from(
+      {
+        length:
+          request
+            .adultPassengers
+      },
+
+      () => ({
+        type: "adult"
+      })
+    );
+
+  const response =
+    await duffelRequest<DuffelOfferRequestResponse>(
+      "/air/offer_requests?return_offers=false&supplier_timeout=15000&view=offers",
+
+      accessToken,
+
+      {
+        method: "POST",
+
+        timeoutMilliseconds:
+          23000,
+
+        body: {
+          data: {
+            slices: [
+              {
+                origin:
+                  normalizeAirportCode(
+                    request.originAirportCode
+                  ),
+
+                destination:
+                  destinationCode,
+
+                departure_date:
+                  request.outboundDate
+              },
+
+              {
+                origin:
+                  destinationCode,
+
+                destination:
+                  normalizeAirportCode(
+                    request.returnAirportCode
+                  ),
+
+                departure_date:
+                  request.returnDate
+              }
+            ],
+
+            passengers,
+
+            cabin_class:
+              "economy",
+
+            max_connections:
+              1
+          }
+        }
+      }
+    );
+
+  const offerRequestId =
+    getString(
+      response.data?.id
+    );
+
+  if (!offerRequestId) {
+    throw new Error(
+      "Duffel created the flight search but did not return an offer request ID."
+    );
+  }
+
+  return offerRequestId;
+}
+
+async function listOffers(
+  offerRequestId: string,
+  maximumResults: number,
+  accessToken: string
+): Promise<DuffelOffer[]> {
+  /*
+   * Pull more than we ultimately display.
+   *
+   * This gives Aurem enough inventory to apply its own
+   * ranking after Duffel sorts the provider results by
+   * total price.
+   */
+  const providerLimit =
+    Math.min(
+      100,
+      Math.max(
+        30,
+        maximumResults * 5
+      )
+    );
+
+  const query =
+    new URLSearchParams({
+      offer_request_id:
+        offerRequestId,
+
+      limit:
+        String(
+          providerLimit
+        ),
+
+      sort:
+        "total_amount",
+
+      max_connections:
+        "1"
+    });
+
+  const response =
+    await duffelRequest<DuffelOffersResponse>(
+      `/air/offers?${query.toString()}`,
+
+      accessToken,
+
+      {
+        method: "GET",
+
+        timeoutMilliseconds:
+          15000
+      }
+    );
+
+  return Array.isArray(
+    response.data
+  )
+    ? response.data
+    : [];
+}
+
 export async function searchFlights(
   request: FlightProviderRequest,
   accessToken: string
@@ -829,82 +994,58 @@ export async function searchFlights(
       accessToken
     );
 
-  const passengers =
-    Array.from(
-      {
-        length:
-          request
-            .adultPassengers
-      },
+  console.log(
+    "Resolved flight destination",
+    {
+      requestedDestination:
+        request.destinationQuery,
 
-      () => ({
-        type: "adult"
-      })
+      resolvedDestination:
+        destination.name,
+
+      destinationCode:
+        destination.code
+    }
+  );
+
+  const offerRequestId =
+    await createOfferRequest(
+      request,
+      destination.code,
+      accessToken
     );
 
-  const response =
-    await duffelRequest<DuffelOfferRequestResponse>(
-      "/air/offer_requests?return_offers=true&supplier_timeout=15000&view=offers",
-
-      accessToken,
-
-      {
-        method: "POST",
-
-        timeoutMilliseconds:
-          23000,
-
-        body: {
-          data: {
-            slices: [
-              {
-                origin:
-                  originAirportCode,
-
-                destination:
-                  destination.code,
-
-                departure_date:
-                  request.outboundDate
-              },
-
-              {
-                origin:
-                  destination.code,
-
-                destination:
-                  returnAirportCode,
-
-                departure_date:
-                  request.returnDate
-              }
-            ],
-
-            passengers,
-
-            cabin_class:
-              "economy",
-
-            max_connections: 1
-          }
-        }
-      }
-    );
+  console.log(
+    "Duffel offer request created",
+    {
+      offerRequestId
+    }
+  );
 
   const providerOffers =
-    Array.isArray(
-      response.data?.offers
-    )
-      ? response.data!.offers!
-      : [];
+    await listOffers(
+      offerRequestId,
+      request.maximumResults,
+      accessToken
+    );
 
-  const flights =
+  console.log(
+    "Duffel offers loaded",
+    {
+      offerRequestId,
+      providerOfferCount:
+        providerOffers.length
+    }
+  );
+
+  const normalizedFlights =
     providerOffers
-      .map((offer) =>
-        normalizeOffer(
-          offer,
-          request
-        )
+      .map(
+        (offer) =>
+          normalizeOffer(
+            offer,
+            request
+          )
       )
       .filter(
         (
@@ -912,6 +1053,28 @@ export async function searchFlights(
         ): flight is FlightOption =>
           flight !== null
       );
+
+  const rankedFlights =
+    rankFlights(
+      normalizedFlights
+    ).slice(
+      0,
+      request.maximumResults
+    );
+
+  console.log(
+    "Flight offers normalized",
+    {
+      providerOfferCount:
+        providerOffers.length,
+
+      normalizedOfferCount:
+        normalizedFlights.length,
+
+      returnedOfferCount:
+        rankedFlights.length
+    }
+  );
 
   return {
     originAirportCode,
@@ -941,11 +1104,6 @@ export async function searchFlights(
         .toUpperCase(),
 
     flights:
-      rankFlights(
-        flights
-      ).slice(
-        0,
-        request.maximumResults
-      )
+      rankedFlights
   };
 }

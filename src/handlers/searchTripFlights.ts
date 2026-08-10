@@ -53,6 +53,27 @@ type TripFlightSearchRow = {
   companion_traveler: boolean;
 };
 
+type ProviderErrorPayload = {
+  errorType?: unknown;
+  errorMessage?: unknown;
+};
+
+type TravelErrorCode =
+  | "BOOKING_LINK_REQUIRED"
+  | "BOOKING_LINK_INVALID"
+  | "BOOKING_LINK_EXPIRED"
+  | "FLIGHT_PROVIDER_NOT_CONFIGURED"
+  | "DESTINATION_MISSING"
+  | "INVALID_AIRPORT"
+  | "INVALID_TRIP_DATES"
+  | "PAST_TRAVEL_DATE"
+  | "INVALID_TRIP_BUDGET"
+  | "DESTINATION_NOT_FOUND"
+  | "NO_FLIGHTS_FOUND"
+  | "PROVIDER_VALIDATION_ERROR"
+  | "PROVIDER_UNAVAILABLE"
+  | "INTERNAL_ERROR";
+
 const lambdaClient =
   new LambdaClient({});
 
@@ -99,6 +120,24 @@ function getErrorDetails(
     name: "UnknownError",
     message: String(error)
   };
+}
+
+function errorResponse(
+  statusCode: number,
+  code: TravelErrorCode,
+  title: string,
+  message: string,
+  canRetry = false
+): APIGatewayProxyResult {
+  return jsonResponse(
+    statusCode,
+    {
+      code,
+      title,
+      message,
+      canRetry
+    }
+  );
 }
 
 function normalizeDateValue(
@@ -185,6 +224,25 @@ function getTodayDateString(): string {
     .substring(0, 10);
 }
 
+function formatDateForMessage(
+  value: string
+): string {
+  const date =
+    new Date(
+      `${value}T12:00:00Z`
+    );
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC"
+    }
+  ).format(date);
+}
+
 function parseProviderResult(
   payload:
     | Uint8Array
@@ -210,10 +268,8 @@ function parseProviderResult(
     !Array.isArray(
       parsed.flights
     ) ||
-
     typeof parsed.destinationCode !==
       "string" ||
-
     typeof parsed.flightBudgetCents !==
       "number"
   ) {
@@ -228,38 +284,56 @@ function parseProviderResult(
   );
 }
 
-function extractProviderMessage(
+function parseProviderError(
   payload: string
-): string | null {
+): {
+  errorType: string | null;
+  errorMessage: string | null;
+} {
+  if (!payload.trim()) {
+    return {
+      errorType: null,
+      errorMessage: null
+    };
+  }
+
   try {
     const parsed =
       JSON.parse(
         payload
-      ) as {
-        errorMessage?: unknown;
-      };
+      ) as ProviderErrorPayload;
 
-    if (
-      typeof parsed.errorMessage ===
-        "string" &&
-      parsed.errorMessage.trim()
-    ) {
-      return parsed.errorMessage.trim();
-    }
+    return {
+      errorType:
+        typeof parsed.errorType ===
+        "string"
+          ? parsed.errorType
+          : null,
+
+      errorMessage:
+        typeof parsed.errorMessage ===
+        "string"
+          ? parsed.errorMessage
+          : null
+    };
   } catch {
-    // Ignore malformed provider errors
-    // and fall back to the generic message.
+    return {
+      errorType: null,
+      errorMessage: payload
+    };
   }
-
-  return null;
 }
 
-function getFriendlyProviderMessage(
-  providerMessage: string
-): string {
+function providerErrorResponse(
+  providerErrorType: string | null,
+  providerMessage: string | null
+): APIGatewayProxyResult {
+  const message =
+    providerMessage?.trim() ??
+    "";
+
   const normalized =
-    providerMessage
-      .toLowerCase();
+    message.toLowerCase();
 
   if (
     normalized.includes(
@@ -269,20 +343,46 @@ function getFriendlyProviderMessage(
       "must be after"
     )
   ) {
-    return (
-      "This trip's travel dates have already passed. " +
-      "Please contact your case manager to update the trip dates."
+    return errorResponse(
+      400,
+      "PAST_TRAVEL_DATE",
+      "These travel dates have already passed",
+      "Flights can only be searched for future travel. Please contact your case manager to update the trip dates.",
+      false
+    );
+  }
+
+  if (
+    normalized.includes(
+      "could not resolve"
+    ) &&
+    normalized.includes(
+      "flight destination"
+    )
+  ) {
+    return errorResponse(
+      400,
+      "DESTINATION_NOT_FOUND",
+      "We couldn't identify the destination",
+      message,
+      false
     );
   }
 
   if (
     normalized.includes(
       "no offers"
+    ) ||
+    normalized.includes(
+      "no flight"
     )
   ) {
-    return (
-      "No flights are currently available for this route and date combination. " +
-      "Please contact your case manager if the trip dates or airports need to be adjusted."
+    return errorResponse(
+      404,
+      "NO_FLIGHTS_FOUND",
+      "No flights were found",
+      "No available flight options matched this route and these travel dates. Please contact your case manager if the dates or airports need to be changed.",
+      false
     );
   }
 
@@ -292,17 +392,64 @@ function getFriendlyProviderMessage(
     ) ||
     normalized.includes(
       "destination"
+    ) ||
+    normalized.includes(
+      "iata"
     )
   ) {
-    return (
-      "We could not search the configured flight route. " +
-      "Please contact your case manager to confirm the trip airports and destination."
+    return errorResponse(
+      400,
+      "PROVIDER_VALIDATION_ERROR",
+      "We couldn't search this route",
+      message ||
+        "One of the airports or destinations on this trip could not be used for flight search. Please contact your case manager.",
+      false
     );
   }
 
-  return (
-    "We were unable to retrieve flight options for this trip. " +
-    "Please try again or contact your case manager if the problem continues."
+  if (
+    normalized.includes(
+      "timeout"
+    ) ||
+    normalized.includes(
+      "timed out"
+    ) ||
+    normalized.includes(
+      "temporarily"
+    ) ||
+    normalized.includes(
+      "unavailable"
+    )
+  ) {
+    return errorResponse(
+      503,
+      "PROVIDER_UNAVAILABLE",
+      "Flight search is temporarily unavailable",
+      "The airline search service did not respond in time. Please try again.",
+      true
+    );
+  }
+
+  if (
+    providerErrorType ===
+    "DuffelApiError" &&
+    message
+  ) {
+    return errorResponse(
+      400,
+      "PROVIDER_VALIDATION_ERROR",
+      "We couldn't complete the flight search",
+      message,
+      false
+    );
+  }
+
+  return errorResponse(
+    502,
+    "PROVIDER_UNAVAILABLE",
+    "Flight search is temporarily unavailable",
+    "We couldn't retrieve flight options right now. Please try again.",
+    true
   );
 }
 
@@ -316,24 +463,24 @@ export async function handler(
         ?.trim();
 
     if (!token) {
-      return jsonResponse(
+      return errorResponse(
         400,
-        {
-          message:
-            "Booking token is required."
-        }
+        "BOOKING_LINK_REQUIRED",
+        "Booking link required",
+        "A valid booking link is required to search for flights.",
+        false
       );
     }
 
     if (
       token.length > 200
     ) {
-      return jsonResponse(
+      return errorResponse(
         400,
-        {
-          message:
-            "Booking token is invalid."
-        }
+        "BOOKING_LINK_INVALID",
+        "Booking link invalid",
+        "This booking link is not valid. Please use the most recent link sent by your case manager.",
+        false
       );
     }
 
@@ -344,12 +491,12 @@ export async function handler(
     if (
       !providerFunctionName
     ) {
-      return jsonResponse(
+      return errorResponse(
         500,
-        {
-          message:
-            "The flight provider has not been configured."
-        }
+        "FLIGHT_PROVIDER_NOT_CONFIGURED",
+        "Flight search is unavailable",
+        "The flight search service has not been configured correctly.",
+        false
       );
     }
 
@@ -411,12 +558,12 @@ export async function handler(
       result.rows[0];
 
     if (!trip) {
-      return jsonResponse(
+      return errorResponse(
         404,
-        {
-          message:
-            "This booking link is invalid, expired, or has been replaced."
-        }
+        "BOOKING_LINK_EXPIRED",
+        "This booking link is no longer available",
+        "The link may have expired or been replaced. Please contact your case manager for a new booking link.",
+        false
       );
     }
 
@@ -428,12 +575,12 @@ export async function handler(
     if (
       !destinationQuery
     ) {
-      return jsonResponse(
+      return errorResponse(
         400,
-        {
-          message:
-            "The trip needs a destination city before flights can be searched."
-        }
+        "DESTINATION_MISSING",
+        "Destination information is missing",
+        "This trip does not have a destination city configured. Please contact your case manager to update the trip.",
+        false
       );
     }
 
@@ -453,12 +600,12 @@ export async function handler(
       !originAirportCode ||
       !returnAirportCode
     ) {
-      return jsonResponse(
+      return errorResponse(
         400,
-        {
-          message:
-            "The trip must contain valid three-letter outbound and return airport codes."
-        }
+        "INVALID_AIRPORT",
+        "The trip contains an invalid airport",
+        "Flight searches require valid three-letter airport codes. Please contact your case manager to update the trip airports.",
+        false
       );
     }
 
@@ -476,12 +623,16 @@ export async function handler(
       returnDate <=
       outboundDate
     ) {
-      return jsonResponse(
+      return errorResponse(
         400,
-        {
-          message:
-            "The trip return date must be after the outbound date."
-        }
+        "INVALID_TRIP_DATES",
+        "The trip dates need to be corrected",
+        `The return date (${formatDateForMessage(
+          returnDate
+        )}) must be after the outbound date (${formatDateForMessage(
+          outboundDate
+        )}). Please contact your case manager to update the trip.`,
+        false
       );
     }
 
@@ -491,12 +642,16 @@ export async function handler(
     if (
       outboundDate <= today
     ) {
-      return jsonResponse(
+      return errorResponse(
         400,
-        {
-          message:
-            "This trip's travel dates have already passed. Please contact your case manager to update the trip dates."
-        }
+        "PAST_TRAVEL_DATE",
+        "These travel dates have already passed",
+        `This trip is scheduled for ${formatDateForMessage(
+          outboundDate
+        )} through ${formatDateForMessage(
+          returnDate
+        )}. Flight searches can only be performed for future travel. Please contact your case manager to update the trip dates.`,
+        false
       );
     }
 
@@ -511,19 +666,18 @@ export async function handler(
       ) ||
       totalTripBudgetCents <= 0
     ) {
-      return jsonResponse(
+      return errorResponse(
         400,
-        {
-          message:
-            "The trip does not have a valid travel budget."
-        }
+        "INVALID_TRIP_BUDGET",
+        "The trip budget needs to be corrected",
+        "This trip does not have a valid positive travel budget. Please contact your case manager to update the trip.",
+        false
       );
     }
 
     const flightBudgetCents =
       Math.max(
         1,
-
         Math.floor(
           (
             totalTripBudgetCents *
@@ -626,21 +780,14 @@ export async function handler(
         }
       );
 
-      const providerMessage =
-        extractProviderMessage(
+      const providerError =
+        parseProviderError(
           errorPayload
         );
 
-      return jsonResponse(
-        400,
-        {
-          message:
-            providerMessage
-              ? getFriendlyProviderMessage(
-                  providerMessage
-                )
-              : "We were unable to retrieve flight options for this trip. Please try again or contact your case manager."
-        }
+      return providerErrorResponse(
+        providerError.errorType,
+        providerError.errorMessage
       );
     }
 
@@ -720,15 +867,12 @@ export async function handler(
       details.name ===
       "AccessDeniedException"
     ) {
-      return jsonResponse(
-        500,
-        {
-          message:
-            "The flight search service is temporarily unavailable. Please try again shortly.",
-
-          error:
-            details.name
-        }
+      return errorResponse(
+        503,
+        "PROVIDER_UNAVAILABLE",
+        "Flight search is temporarily unavailable",
+        "The flight search service is temporarily unavailable. Please try again shortly.",
+        true
       );
     }
 
@@ -736,27 +880,21 @@ export async function handler(
       details.name ===
       "ResourceNotFoundException"
     ) {
-      return jsonResponse(
-        500,
-        {
-          message:
-            "The flight search service is temporarily unavailable. Please try again shortly.",
-
-          error:
-            details.name
-        }
+      return errorResponse(
+        503,
+        "PROVIDER_UNAVAILABLE",
+        "Flight search is temporarily unavailable",
+        "The flight search service is temporarily unavailable. Please try again shortly.",
+        true
       );
     }
 
-    return jsonResponse(
+    return errorResponse(
       500,
-      {
-        message:
-          "We were unable to search for flights. Please try again or contact your case manager if the problem continues.",
-
-        error:
-          details.name
-      }
+      "INTERNAL_ERROR",
+      "Something went wrong",
+      "We couldn't complete the flight search because of an unexpected error. Please try again. If the problem continues, contact your case manager.",
+      true
     );
   }
 }
