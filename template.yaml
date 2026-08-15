@@ -599,6 +599,53 @@ Resources:
         External:
           - pg-native
 
+  GetPaymentMethodsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-get-payment-methods
+      CodeUri: .
+      Handler: getPaymentMethods.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+      Events:
+        GetPaymentMethodsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /payment-methods
+            Method: GET
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/getPaymentMethods.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
   CreateTripFunction:
     Type: AWS::Serverless::Function
     Properties:
