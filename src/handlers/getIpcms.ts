@@ -34,21 +34,16 @@ export async function handler(
       );
     }
 
-    /*
-     * Keep IPCM administration restricted
-     * to Admin users even though IPCMs may
-     * temporarily receive broad application
-     * access elsewhere during development.
-     */
-    if (
-      currentUser.roleName !==
-      "admin"
-    ) {
+    const canViewIpcmProfiles =
+      currentUser.roleName === "admin" ||
+      currentUser.roleName === "ipcm";
+
+    if (!canViewIpcmProfiles) {
       return jsonResponse(
         403,
         {
           message:
-            "Only Administrators can manage IPCM invitations."
+            "Your role is not authorized to view IPCM profiles."
         }
       );
     }
@@ -61,6 +56,9 @@ export async function handler(
     return jsonResponse(
       200,
       {
+        canInvite:
+          currentUser.roleName === "admin",
+
         ipcms
       }
     );
@@ -74,7 +72,7 @@ export async function handler(
       500,
       {
         message:
-          "Unable to load IPCMs."
+          "Unable to load IPCM profiles."
       }
     );
   }

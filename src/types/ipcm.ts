@@ -32,6 +32,8 @@ export type IpcmDirectoryItem = {
 };
 
 export type IpcmDirectoryResponse = {
+  canInvite: boolean;
+
   ipcms: IpcmDirectoryItem[];
 };
 
