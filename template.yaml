@@ -646,6 +646,139 @@ Resources:
         External:
           - pg-native
 
+  GetIpcmsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-get-ipcms
+      CodeUri: .
+      Handler: getIpcms.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+      Events:
+        GetIpcmsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /ipcms
+            Method: GET
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/getIpcms.ts
+
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+
+        External:
+          - pg-native
+
+
+  InviteIpcmFunction:
+    Type: AWS::Serverless::Function
+
+    DependsOn:
+      - LambdaVpcEndpoint
+
+    Properties:
+      FunctionName: aurem-dev-invite-ipcm
+      CodeUri: .
+      Handler: inviteIpcm.handler
+      Runtime: nodejs22.x
+      Timeout: 15
+      MemorySize: 256
+
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+
+          EMAIL_SERVICE_FUNCTION_NAME:
+            !Ref EmailServiceFunction
+
+          FRONTEND_BASE_URL:
+            !Ref FrontendBaseUrl
+
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+        - Statement:
+            - Sid: InvokeEmailServiceForIpcmInvitation
+
+              Effect: Allow
+
+              Action:
+                - lambda:InvokeFunction
+
+              Resource:
+                !GetAtt EmailServiceFunction.Arn
+
+      Events:
+        InviteIpcmApi:
+          Type: Api
+
+          Properties:
+            RestApiId:
+              !Ref AuremApi
+
+            Path:
+              /ipcms/invitations
+
+            Method:
+              POST
+
+    Metadata:
+      BuildMethod: esbuild
+
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/inviteIpcm.ts
+
+        Minify: false
+
+        Target:
+          es2022
+
+        Sourcemap:
+          true
+
+        External:
+          - pg-native
+
   CreateTripFunction:
     Type: AWS::Serverless::Function
     Properties:
