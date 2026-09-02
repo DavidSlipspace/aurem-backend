@@ -97,7 +97,7 @@ export type FlightProviderResult = {
 
 export type SearchTripFlightsResult = {
   tripReferenceId: string;
-  gcName: string;
+  travelerName: string;
 
   originAirportCode: string;
 

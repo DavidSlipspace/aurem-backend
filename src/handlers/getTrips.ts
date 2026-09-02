@@ -22,10 +22,10 @@ type TripRow = {
   case_id: string;
   case_reference_id: string;
 
-  gc_profile_id: string;
-  gc_first_name: string;
-  gc_last_name: string;
-  gc_email: string;
+  traveler_profile_id: string;
+  traveler_first_name: string;
+  traveler_last_name: string;
+  traveler_email: string;
 
   trip_purpose: string;
   status: string;
@@ -218,16 +218,16 @@ export async function handler(
               t.case_id,
               c.case_reference_id,
 
-              t.gc_profile_id,
+              t.traveler_profile_id,
 
               gp.legal_first_name
-                AS gc_first_name,
+                AS traveler_first_name,
 
               gp.legal_last_name
-                AS gc_last_name,
+                AS traveler_last_name,
 
               gp.email
-                AS gc_email,
+                AS traveler_email,
 
               t.trip_purpose,
               t.status,
@@ -332,9 +332,9 @@ export async function handler(
               ON cm.id =
                 c.case_manager_user_id
 
-            JOIN gc_profiles gp
+            JOIN traveler_profiles gp
               ON gp.id =
-                t.gc_profile_id
+                t.traveler_profile_id
 
             LEFT JOIN trip_flights
               outbound_flight
@@ -390,15 +390,15 @@ export async function handler(
                 row
                   .case_reference_id,
 
-              gcProfileId:
+              travelerProfileId:
                 row
-                  .gc_profile_id,
+                  .traveler_profile_id,
 
-              gcName:
-                `${row.gc_first_name} ${row.gc_last_name}`.trim(),
+              travelerName:
+                `${row.traveler_first_name} ${row.traveler_last_name}`.trim(),
 
-              gcEmail:
-                row.gc_email,
+              travelerEmail:
+                row.traveler_email,
 
               tripPurpose:
                 row.trip_purpose,

@@ -5,7 +5,7 @@ import { getCurrentUser } from "../common/currentUser";
 
 type CreateTripRequest = {
   caseId: string;
-  gcProfileId: string;
+  travelerProfileId: string;
   tripPurpose: string;
   outboundDate: string;
   returnDate: string;
@@ -43,7 +43,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (
       !body.caseId ||
-      !body.gcProfileId ||
+      !body.travelerProfileId ||
       !body.tripPurpose ||
       !body.outboundDate ||
       !body.returnDate ||
@@ -79,19 +79,19 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const gcAccessResult = await pool.query(
+    const travelerAccessResult = await pool.query(
       `
       SELECT id
-      FROM gc_profiles
+      FROM traveler_profiles
       WHERE id = $1
         AND company_id = $2
         AND status = 'active'
       LIMIT 1;
       `,
-      [body.gcProfileId, currentUser.companyId]
+      [body.travelerProfileId, currentUser.companyId]
     );
 
-    if (gcAccessResult.rowCount === 0) {
+    if (travelerAccessResult.rowCount === 0) {
       return jsonResponse(400, {
         message: "GC profile not found or inactive."
       });
@@ -102,7 +102,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       INSERT INTO trips (
         trip_reference_id,
         case_id,
-        gc_profile_id,
+        traveler_profile_id,
         trip_purpose,
         status,
         outbound_date,
@@ -124,7 +124,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       [
         buildTripReferenceId(),
         body.caseId,
-        body.gcProfileId,
+        body.travelerProfileId,
         body.tripPurpose,
         body.outboundDate,
         body.returnDate,

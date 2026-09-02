@@ -21,8 +21,8 @@ type BookingLinkRow = {
   trip_id: string;
   trip_reference_id: string;
 
-  gc_first_name: string;
-  gc_last_name: string;
+  traveler_first_name: string;
+  traveler_last_name: string;
 
   expires_at: string;
 
@@ -124,10 +124,10 @@ export async function handler(
               t.trip_reference_id,
 
               gp.legal_first_name
-                AS gc_first_name,
+                AS traveler_first_name,
 
               gp.legal_last_name
-                AS gc_last_name,
+                AS traveler_last_name,
 
               bl.expires_at,
               bl.used_at,
@@ -142,9 +142,9 @@ export async function handler(
               ON t.id =
                 bl.trip_id
 
-            JOIN gc_profiles gp
+            JOIN traveler_profiles gp
               ON gp.id =
-                bl.gc_profile_id
+                bl.traveler_profile_id
 
             WHERE
               bl.token_hash = $1
@@ -177,9 +177,9 @@ export async function handler(
       );
     }
 
-    const gcName =
-      `${bookingLink.gc_first_name} ` +
-      `${bookingLink.gc_last_name}`;
+    const travelerName =
+      `${bookingLink.traveler_first_name} ` +
+      `${bookingLink.traveler_last_name}`;
 
     return jsonResponse(
       200,
@@ -196,8 +196,8 @@ export async function handler(
           bookingLink
             .trip_reference_id,
 
-        gcName:
-          gcName.trim(),
+        travelerName:
+          travelerName.trim(),
 
         expiresAt:
           bookingLink

@@ -36,7 +36,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         hotel_rewards_number,
         seat_preference,
         status
-      FROM gc_profiles
+      FROM traveler_profiles
       WHERE company_id = $1
       ORDER BY legal_last_name, legal_first_name;
       `,
@@ -44,7 +44,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     );
 
     return jsonResponse(200, {
-      gcProfiles: result.rows.map((row) => ({
+      travelerProfiles: result.rows.map((row) => ({
         id: row.id,
         legalFirstName: row.legal_first_name,
         legalMiddleName: row.legal_middle_name,
@@ -62,7 +62,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }))
     });
   } catch (error) {
-    console.error("GET /gc-profiles error", error);
+    console.error("GET /traveler-profiles error", error);
     return jsonResponse(500, { message: "Unable to load GC profiles." });
   }
 }

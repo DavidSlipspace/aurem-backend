@@ -5,7 +5,7 @@ import { getCurrentUser } from "../common/currentUser";
 
 type UpdateTripRequest = {
   caseId: string;
-  gcProfileId: string;
+  travelerProfileId: string;
   tripPurpose: string;
   outboundDate: string;
   returnDate: string;
@@ -48,7 +48,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (
       !body.caseId ||
-      !body.gcProfileId ||
+      !body.travelerProfileId ||
       !body.tripPurpose ||
       !body.outboundDate ||
       !body.returnDate ||
@@ -68,7 +68,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       UPDATE trips t
       SET
         case_id = $1,
-        gc_profile_id = $2,
+        traveler_profile_id = $2,
         trip_purpose = $3,
         outbound_date = $4,
         return_date = $5,
@@ -84,7 +84,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         updated_at = CURRENT_TIMESTAMP
       FROM cases c
       JOIN users cm ON cm.id = c.case_manager_user_id
-      JOIN gc_profiles gp ON gp.id = $2
+      JOIN traveler_profiles gp ON gp.id = $2
       WHERE t.id = $15
         AND c.id = $1
         AND t.case_id = c.id
@@ -97,7 +97,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       `,
       [
         body.caseId,
-        body.gcProfileId,
+        body.travelerProfileId,
         body.tripPurpose,
         body.outboundDate,
         body.returnDate,

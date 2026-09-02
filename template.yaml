@@ -431,12 +431,12 @@ Resources:
         External:
           - pg-native
 
-  GetGcProfilesFunction:
+  GetTravelerProfilesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: aurem-dev-get-gc-profiles
+      FunctionName: aurem-dev-get-traveler-profiles
       CodeUri: .
-      Handler: getGcProfiles.handler
+      Handler: getTravelerProfiles.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
@@ -456,29 +456,29 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
       Events:
-        GetGcProfiles:
+        GetTravelerProfiles:
           Type: Api
           Properties:
             RestApiId: !Ref AuremApi
-            Path: /gc-profiles
+            Path: /traveler-profiles
             Method: GET
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints:
-          - src/handlers/getGcProfiles.ts
+          - src/handlers/getTravelerProfiles.ts
         Minify: false
         Target: es2022
         Sourcemap: true
         External:
           - pg-native
 
-  CreateGcProfileFunction:
+  CreateTravelerProfileFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: aurem-dev-create-gc-profile
+      FunctionName: aurem-dev-create-traveler-profile
       CodeUri: .
-      Handler: createGcProfile.handler
+      Handler: createTravelerProfile.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
@@ -498,29 +498,29 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
       Events:
-        CreateGcProfile:
+        CreateTravelerProfile:
           Type: Api
           Properties:
             RestApiId: !Ref AuremApi
-            Path: /gc-profiles
+            Path: /traveler-profiles
             Method: POST
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints:
-          - src/handlers/createGcProfile.ts
+          - src/handlers/createTravelerProfile.ts
         Minify: false
         Target: es2022
         Sourcemap: true
         External:
           - pg-native
 
-  UpdateGcProfileFunction:
+  UpdateTravelerProfileFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: aurem-dev-update-gc-profile
+      FunctionName: aurem-dev-update-traveler-profile
       CodeUri: .
-      Handler: updateGcProfile.handler
+      Handler: updateTravelerProfile.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
@@ -540,17 +540,17 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
       Events:
-        UpdateGcProfile:
+        UpdateTravelerProfile:
           Type: Api
           Properties:
             RestApiId: !Ref AuremApi
-            Path: /gc-profiles/{id}
+            Path: /traveler-profiles/{id}
             Method: PUT
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints:
-          - src/handlers/updateGcProfile.ts
+          - src/handlers/updateTravelerProfile.ts
         Minify: false
         Target: es2022
         Sourcemap: true

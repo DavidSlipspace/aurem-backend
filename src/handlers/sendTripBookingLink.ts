@@ -26,10 +26,10 @@ import type {
 type TripEmailRow = {
   id: string;
   trip_reference_id: string;
-  gc_profile_id: string;
-  gc_first_name: string;
-  gc_last_name: string;
-  gc_email: string | null;
+  traveler_profile_id: string;
+  traveler_first_name: string;
+  traveler_last_name: string;
+  traveler_email: string | null;
 };
 
 const BOOKING_LINK_EXPIRATION_DAYS = 7;
@@ -130,12 +130,12 @@ function parseEmailServiceResult(
 }
 
 function createTextEmail(
-  gcName: string,
+  travelerName: string,
   tripReferenceId: string,
   bookingUrl: string
 ): string {
   return [
-    `Hello ${gcName},`,
+    `Hello ${travelerName},`,
     "",
     "Your travel request is ready for review.",
     "",
@@ -153,11 +153,11 @@ function createTextEmail(
 }
 
 function createHtmlEmail(
-  gcName: string,
+  travelerName: string,
   tripReferenceId: string,
   bookingUrl: string
 ): string {
-  const safeGcName = escapeHtml(gcName);
+  const safeTravelerName = escapeHtml(travelerName);
   const safeTripReferenceId = escapeHtml(
     tripReferenceId
   );
@@ -252,7 +252,7 @@ function createHtmlEmail(
                         line-height: 1.25;
                       "
                     >
-                      Hello ${safeGcName},
+                      Hello ${safeTravelerName},
                     </h1>
 
                     <p
@@ -495,17 +495,17 @@ export async function handler(
         SELECT
           t.id,
           t.trip_reference_id,
-          t.gc_profile_id,
-          gp.legal_first_name AS gc_first_name,
-          gp.legal_last_name AS gc_last_name,
-          gp.email AS gc_email
+          t.traveler_profile_id,
+          gp.legal_first_name AS traveler_first_name,
+          gp.legal_last_name AS traveler_last_name,
+          gp.email AS traveler_email
         FROM trips t
         JOIN cases c
           ON c.id = t.case_id
         JOIN users cm
           ON cm.id = c.case_manager_user_id
-        JOIN gc_profiles gp
-          ON gp.id = t.gc_profile_id
+        JOIN traveler_profiles gp
+          ON gp.id = t.traveler_profile_id
         WHERE
           t.id = $1
           AND ${accessClause}
@@ -524,8 +524,8 @@ export async function handler(
     }
 
     if (
-      !trip.gc_email ||
-      !isValidEmail(trip.gc_email)
+      !trip.traveler_email ||
+      !isValidEmail(trip.traveler_email)
     ) {
       return jsonResponse(400, {
         message:
@@ -533,8 +533,8 @@ export async function handler(
       });
     }
 
-    const gcName =
-      `${trip.gc_first_name} ${trip.gc_last_name}`.trim();
+    const travelerName =
+      `${trip.traveler_first_name} ${trip.traveler_last_name}`.trim();
 
     const {
       rawToken,
@@ -570,7 +570,7 @@ export async function handler(
           INSERT INTO booking_links (
             id,
             trip_id,
-            gc_profile_id,
+            traveler_profile_id,
             token_hash,
             expires_at,
             created_at,
@@ -589,7 +589,7 @@ export async function handler(
         [
           bookingLinkId,
           trip.id,
-          trip.gc_profile_id,
+          trip.traveler_profile_id,
           tokenHash,
           expiresAt
         ]
@@ -607,16 +607,16 @@ export async function handler(
       `${frontendBaseUrl}/booking/${rawToken}`;
 
     const emailRequest: SendEmailRequest = {
-      to: trip.gc_email,
+      to: trip.traveler_email,
       subject:
         "Your Aurem travel request is ready",
       textBody: createTextEmail(
-        gcName,
+        travelerName,
         trip.trip_reference_id,
         bookingUrl
       ),
       htmlBody: createHtmlEmail(
-        gcName,
+        travelerName,
         trip.trip_reference_id,
         bookingUrl
       )
@@ -653,8 +653,8 @@ export async function handler(
       tripReferenceId: trip.trip_reference_id,
       bookingLinkId,
       expiresAt: expiresAt.toISOString(),
-      sentTo: trip.gc_email,
-      gcName,
+      sentTo: trip.traveler_email,
+      travelerName,
       messageId: emailResult.messageId
     });
   } catch (error) {
