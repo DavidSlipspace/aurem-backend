@@ -17,24 +17,52 @@ import {
 
 type TripRow = {
   id: string;
-  trip_reference_id: string;
+
+  trip_reference_id:
+    string;
 
   case_id: string;
-  case_reference_id: string;
 
-  traveler_profile_id: string;
-  traveler_first_name: string;
-  traveler_last_name: string;
-  traveler_email: string;
+  case_reference_id:
+    string;
 
-  trip_purpose: string;
+  traveler_profile_id:
+    string;
+
+  traveler_first_name:
+    string;
+
+  traveler_last_name:
+    string;
+
+  traveler_email:
+    string;
+
+  ipcm_user_id:
+    string;
+
+  ipcm_first_name:
+    string;
+
+  ipcm_last_name:
+    string;
+
+  trip_purpose:
+    string;
+
   status: string;
 
-  outbound_date: string;
-  return_date: string;
+  outbound_date:
+    string;
 
-  outbound_airport: string;
-  return_airport: string;
+  return_date:
+    string;
+
+  outbound_airport:
+    string;
+
+  return_airport:
+    string;
 
   destination_city:
     | string
@@ -52,11 +80,14 @@ type TripRow = {
     | number
     | null;
 
-  budget_filter: number;
+  budget_filter:
+    number;
 
-  companion_traveler: boolean;
+  companion_traveler:
+    boolean;
 
-  ipcm_approval_required: boolean;
+  ipcm_approval_required:
+    boolean;
 
   selected_flight_offer_id:
     | string
@@ -144,15 +175,20 @@ type TripRow = {
 };
 
 export async function handler(
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> {
+  event:
+    APIGatewayProxyEvent
+): Promise<
+  APIGatewayProxyResult
+> {
   try {
     const currentUser =
       await getCurrentUser(
         event
       );
 
-    if (!currentUser) {
+    if (
+      !currentUser
+    ) {
       return jsonResponse(
         403,
         {
@@ -162,7 +198,8 @@ export async function handler(
       );
     }
 
-    let whereClause = "";
+    let whereClause =
+      "";
 
     const params:
       string[] = [];
@@ -172,7 +209,7 @@ export async function handler(
       "admin"
     ) {
       whereClause =
-        "cm.company_id = $1";
+        "c.company_id = $1";
 
       params.push(
         currentUser.companyId
@@ -192,7 +229,7 @@ export async function handler(
       "ipcm"
     ) {
       whereClause =
-        "c.ip_user_id = $1";
+        "t.ipcm_user_id = $1";
 
       params.push(
         currentUser.id
@@ -209,163 +246,183 @@ export async function handler(
 
     const result =
       await getPool()
-        .query<TripRow>(
+        .query<
+          TripRow
+        >(
           `
-            SELECT
-              t.id,
-              t.trip_reference_id,
+          SELECT
+            t.id,
+            t.trip_reference_id,
 
-              t.case_id,
-              c.case_reference_id,
+            t.case_id,
 
-              t.traveler_profile_id,
+            c.case_reference_id,
 
-              gp.legal_first_name
-                AS traveler_first_name,
+            t.traveler_profile_id,
 
-              gp.legal_last_name
-                AS traveler_last_name,
+            tp.legal_first_name
+              AS traveler_first_name,
 
-              gp.email
-                AS traveler_email,
+            tp.legal_last_name
+              AS traveler_last_name,
 
-              t.trip_purpose,
-              t.status,
+            tp.email
+              AS traveler_email,
 
-              t.outbound_date,
-              t.return_date,
+            t.ipcm_user_id,
 
-              t.outbound_airport,
-              t.return_airport,
+            ipcm.first_name
+              AS ipcm_first_name,
 
-              t.destination_city,
-              t.destination_address,
+            ipcm.last_name
+              AS ipcm_last_name,
 
-              t.hotel_proximity_preference,
-              t.minimum_hotel_star_rating,
+            t.trip_purpose,
 
-              t.budget_filter,
-              t.companion_traveler,
-              t.ipcm_approval_required,
+            t.status,
 
-              outbound_flight.provider_offer_id
-                AS selected_flight_offer_id,
+            t.outbound_date,
 
-              outbound_flight.airline
-                AS selected_flight_airline,
+            t.return_date,
 
-              outbound_flight.departure_airport
-                AS selected_flight_origin,
+            t.outbound_airport,
 
-              outbound_flight.arrival_airport
-                AS selected_flight_destination,
+            t.return_airport,
 
-              return_flight.departure_airport
-                AS selected_flight_return_origin,
+            t.destination_city,
 
-              return_flight.arrival_airport
-                AS selected_flight_return_destination,
+            t.destination_address,
 
-              outbound_flight.departure_datetime
-                AS selected_flight_outbound_departure,
+            t.hotel_proximity_preference,
 
-              return_flight.departure_datetime
-                AS selected_flight_return_departure,
+            t.minimum_hotel_star_rating,
 
-              CASE
-                WHEN
-                  outbound_flight.id
-                  IS NOT NULL
-                THEN
-                  outbound_flight.price +
-                  COALESCE(
-                    return_flight.price,
-                    0
-                  )
-                ELSE NULL
-              END
-                AS selected_flight_price,
+            t.budget_filter,
 
-              outbound_flight.currency
-                AS selected_flight_currency,
+            t.companion_traveler,
 
-              outbound_flight.approval_status
-                AS selected_flight_approval_status,
+            t.ipcm_approval_required,
 
-              outbound_flight.booking_status
-                AS selected_flight_booking_status,
+            outbound_flight.provider_offer_id
+              AS selected_flight_offer_id,
 
-              hotel.provider_offer_id
-                AS selected_hotel_offer_id,
+            outbound_flight.airline
+              AS selected_flight_airline,
 
-              hotel.hotel_name
-                AS selected_hotel_name,
+            outbound_flight.departure_airport
+              AS selected_flight_origin,
 
-              hotel.hotel_address
-                AS selected_hotel_address,
+            outbound_flight.arrival_airport
+              AS selected_flight_destination,
 
-              hotel.check_in_date
-                AS selected_hotel_check_in,
+            return_flight.departure_airport
+              AS selected_flight_return_origin,
 
-              hotel.check_out_date
-                AS selected_hotel_check_out,
+            return_flight.arrival_airport
+              AS selected_flight_return_destination,
 
-              hotel.price
-                AS selected_hotel_price,
+            outbound_flight.departure_datetime
+              AS selected_flight_outbound_departure,
 
-              hotel.currency
-                AS selected_hotel_currency,
+            return_flight.departure_datetime
+              AS selected_flight_return_departure,
 
-              hotel.approval_status
-                AS selected_hotel_approval_status,
+            CASE
+              WHEN
+                outbound_flight.id
+                IS NOT NULL
 
-              hotel.booking_status
-                AS selected_hotel_booking_status
+              THEN
+                outbound_flight.price +
+                COALESCE(
+                  return_flight.price,
+                  0
+                )
 
-            FROM trips t
+              ELSE NULL
+            END
+              AS selected_flight_price,
 
-            JOIN cases c
-              ON c.id =
-                t.case_id
+            outbound_flight.currency
+              AS selected_flight_currency,
 
-            JOIN users cm
-              ON cm.id =
-                c.case_manager_user_id
+            outbound_flight.approval_status
+              AS selected_flight_approval_status,
 
-            JOIN traveler_profiles gp
-              ON gp.id =
-                t.traveler_profile_id
+            outbound_flight.booking_status
+              AS selected_flight_booking_status,
 
-            LEFT JOIN trip_flights
-              outbound_flight
-              ON
-                outbound_flight.trip_id =
-                  t.id
+            hotel.provider_offer_id
+              AS selected_hotel_offer_id,
 
-                AND
-                  outbound_flight.direction =
-                    'outbound'
+            hotel.hotel_name
+              AS selected_hotel_name,
 
-            LEFT JOIN trip_flights
-              return_flight
-              ON
-                return_flight.trip_id =
-                  t.id
+            hotel.hotel_address
+              AS selected_hotel_address,
 
-                AND
-                  return_flight.direction =
-                    'return'
+            hotel.check_in_date
+              AS selected_hotel_check_in,
 
-            LEFT JOIN trip_hotels hotel
-              ON
-                hotel.trip_id =
-                  t.id
+            hotel.check_out_date
+              AS selected_hotel_check_out,
 
-            WHERE
-              ${whereClause}
+            hotel.price
+              AS selected_hotel_price,
 
-            ORDER BY
-              t.created_at DESC;
+            hotel.currency
+              AS selected_hotel_currency,
+
+            hotel.approval_status
+              AS selected_hotel_approval_status,
+
+            hotel.booking_status
+              AS selected_hotel_booking_status
+
+          FROM trips t
+
+          JOIN cases c
+            ON c.id =
+              t.case_id
+
+          JOIN traveler_profiles tp
+            ON tp.id =
+              t.traveler_profile_id
+
+          JOIN users ipcm
+            ON ipcm.id =
+              t.ipcm_user_id
+
+          LEFT JOIN trip_flights
+            outbound_flight
+            ON
+              outbound_flight.trip_id =
+                t.id
+
+              AND
+              outbound_flight.direction =
+                'outbound'
+
+          LEFT JOIN trip_flights
+            return_flight
+            ON
+              return_flight.trip_id =
+                t.id
+
+              AND
+              return_flight.direction =
+                'return'
+
+          LEFT JOIN trip_hotels hotel
+            ON
+              hotel.trip_id =
+                t.id
+
+          WHERE
+            ${whereClause}
+
+          ORDER BY
+            t.created_at DESC;
           `,
           params
         );
@@ -375,30 +432,35 @@ export async function handler(
       {
         trips:
           result.rows.map(
-            (row) => ({
+            (
+              row
+            ) => ({
               id:
                 row.id,
 
               tripReferenceId:
-                row
-                  .trip_reference_id,
+                row.trip_reference_id,
 
               caseId:
                 row.case_id,
 
               caseReferenceId:
-                row
-                  .case_reference_id,
+                row.case_reference_id,
 
               travelerProfileId:
-                row
-                  .traveler_profile_id,
+                row.traveler_profile_id,
 
               travelerName:
                 `${row.traveler_first_name} ${row.traveler_last_name}`.trim(),
 
               travelerEmail:
                 row.traveler_email,
+
+              ipcmUserId:
+                row.ipcm_user_id,
+
+              ipcmName:
+                `${row.ipcm_first_name} ${row.ipcm_last_name}`.trim(),
 
               tripPurpose:
                 row.trip_purpose,
@@ -413,28 +475,22 @@ export async function handler(
                 row.return_date,
 
               outboundAirport:
-                row
-                  .outbound_airport,
+                row.outbound_airport,
 
               returnAirport:
-                row
-                  .return_airport,
+                row.return_airport,
 
               destinationCity:
-                row
-                  .destination_city,
+                row.destination_city,
 
               destinationAddress:
-                row
-                  .destination_address,
+                row.destination_address,
 
               hotelProximityPreference:
-                row
-                  .hotel_proximity_preference,
+                row.hotel_proximity_preference,
 
               minimumHotelStarRating:
-                row
-                  .minimum_hotel_star_rating,
+                row.minimum_hotel_star_rating,
 
               budgetFilter:
                 Number(
@@ -442,121 +498,98 @@ export async function handler(
                 ),
 
               companionTraveler:
-                row
-                  .companion_traveler,
+                row.companion_traveler,
 
               ipcmApprovalRequired:
-                row
-                  .ipcm_approval_required,
+                row.ipcm_approval_required,
 
               selectedFlight:
-                row
-                  .selected_flight_offer_id
+                row.selected_flight_offer_id
                   ? {
                       offerId:
-                        row
-                          .selected_flight_offer_id,
+                        row.selected_flight_offer_id,
 
                       airline:
-                        row
-                          .selected_flight_airline,
+                        row.selected_flight_airline,
 
                       originAirport:
-                        row
-                          .selected_flight_origin,
+                        row.selected_flight_origin,
 
                       destinationAirport:
-                        row
-                          .selected_flight_destination,
+                        row.selected_flight_destination,
 
                       returnOriginAirport:
-                        row
-                          .selected_flight_return_origin,
+                        row.selected_flight_return_origin,
 
                       returnDestinationAirport:
-                        row
-                          .selected_flight_return_destination,
+                        row.selected_flight_return_destination,
 
                       outboundDepartureAt:
-                        row
-                          .selected_flight_outbound_departure,
+                        row.selected_flight_outbound_departure,
 
                       returnDepartureAt:
-                        row
-                          .selected_flight_return_departure,
+                        row.selected_flight_return_departure,
 
                       price:
                         Number(
-                          row
-                            .selected_flight_price ??
+                          row.selected_flight_price ??
                             0
                         ),
 
                       currency:
-                        row
-                          .selected_flight_currency ??
+                        row.selected_flight_currency ??
                         "USD",
 
                       approvalStatus:
-                        row
-                          .selected_flight_approval_status,
+                        row.selected_flight_approval_status,
 
                       bookingStatus:
-                        row
-                          .selected_flight_booking_status
+                        row.selected_flight_booking_status
                     }
                   : null,
 
               selectedHotel:
-                row
-                  .selected_hotel_offer_id
+                row.selected_hotel_offer_id
                   ? {
                       offerId:
-                        row
-                          .selected_hotel_offer_id,
+                        row.selected_hotel_offer_id,
 
                       name:
-                        row
-                          .selected_hotel_name,
+                        row.selected_hotel_name,
 
                       address:
-                        row
-                          .selected_hotel_address,
+                        row.selected_hotel_address,
 
                       checkInDate:
-                        row
-                          .selected_hotel_check_in,
+                        row.selected_hotel_check_in,
 
                       checkOutDate:
-                        row
-                          .selected_hotel_check_out,
+                        row.selected_hotel_check_out,
 
                       price:
                         Number(
-                          row
-                            .selected_hotel_price ??
+                          row.selected_hotel_price ??
                             0
                         ),
 
                       currency:
-                        row
-                          .selected_hotel_currency ??
+                        row.selected_hotel_currency ??
                         "USD",
 
                       approvalStatus:
-                        row
-                          .selected_hotel_approval_status,
+                        row.selected_hotel_approval_status,
 
                       bookingStatus:
-                        row
-                          .selected_hotel_booking_status
+                        row.selected_hotel_booking_status
                     }
                   : null
             })
           )
       }
     );
-  } catch (error) {
+  } catch (
+    error
+  ) {
     console.error(
       "GET /trips error",
       error

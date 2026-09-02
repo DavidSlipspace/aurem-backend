@@ -16,15 +16,20 @@ import {
 } from "../services/ipcm/ipcmInvitationService";
 
 export async function handler(
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> {
+  event:
+    APIGatewayProxyEvent
+): Promise<
+  APIGatewayProxyResult
+> {
   try {
     const currentUser =
       await getCurrentUser(
         event
       );
 
-    if (!currentUser) {
+    if (
+      !currentUser
+    ) {
       return jsonResponse(
         403,
         {
@@ -34,16 +39,15 @@ export async function handler(
       );
     }
 
-    const canViewIpcmProfiles =
-      currentUser.roleName === "admin" ||
-      currentUser.roleName === "ipcm";
-
-    if (!canViewIpcmProfiles) {
+    if (
+      currentUser.roleName !==
+      "admin"
+    ) {
       return jsonResponse(
         403,
         {
           message:
-            "Your role is not authorized to view IPCM profiles."
+            "Only Administrators can view IPCM administration."
         }
       );
     }
@@ -57,12 +61,14 @@ export async function handler(
       200,
       {
         canInvite:
-          currentUser.roleName === "admin",
+          true,
 
         ipcms
       }
     );
-  } catch (error) {
+  } catch (
+    error
+  ) {
     console.error(
       "GET /ipcms failed",
       error

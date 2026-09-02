@@ -139,6 +139,18 @@ Resources:
       SecurityGroupIds:
         - !Ref VpcEndpointSecurityGroup
 
+  CognitoIdpVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.cognito-idp
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetIdB
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
   SsmVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -467,6 +479,192 @@ Resources:
       BuildProperties:
         EntryPoints:
           - src/handlers/getTravelerProfiles.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  UpdateMyProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-update-my-profile
+      CodeUri: .
+      Handler: updateMyProfile.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        UpdateMyProfileApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /me/profile
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/updateMyProfile.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+
+  UpsertPaymentMethodFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-upsert-payment-method
+      CodeUri: .
+      Handler: upsertPaymentMethod.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        UpsertPaymentMethodApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /payment-methods
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/upsertPaymentMethod.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+
+  ValidateIpcmInvitationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-validate-ipcm-invitation
+      CodeUri: .
+      Handler: validateIpcmInvitation.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        ValidateIpcmInvitationApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /public/ipcm-invitations/{token}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/validateIpcmInvitation.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+
+  AcceptIpcmInvitationFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - CognitoIdpVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-accept-ipcm-invitation
+      CodeUri: .
+      Handler: acceptIpcmInvitation.handler
+      Runtime: nodejs22.x
+      Timeout: 20
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          COGNITO_USER_POOL_ID: !Ref UserPool
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: CreateIpcmCognitoUsers
+              Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminSetUserPassword
+                - cognito-idp:AdminDeleteUser
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        AcceptIpcmInvitationApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /public/ipcm-invitations/{token}/accept
+            Method: POST
+            Auth:
+              Authorizer: NONE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/acceptIpcmInvitation.ts
         Minify: false
         Target: es2022
         Sourcemap: true

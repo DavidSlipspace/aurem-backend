@@ -1,4 +1,8 @@
-import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import type {
+  APIGatewayProxyEvent,
+  APIGatewayProxyResult
+} from "aws-lambda";
+
 import { getPool } from "../db/pool";
 import { getCognitoClaims } from "../common/auth";
 import { jsonResponse } from "../common/response";
@@ -26,84 +30,167 @@ export async function handler(
     const claims = getCognitoClaims(event);
     const pool = getPool();
 
-    const currentUserResult = await pool.query<CurrentUserRow>(
-      `
-      SELECT
-        u.id,
-        u.company_id,
-        r.name AS role_name
-      FROM users u
-      JOIN user_roles ur ON ur.user_id = u.id
-      JOIN roles r ON r.id = ur.role_id
-      WHERE u.cognito_user_id = $1
-        AND u.status = 'active'
-      LIMIT 1;
-      `,
-      [claims.sub]
-    );
+    const currentUserResult =
+      await pool.query<CurrentUserRow>(
+        `
+        SELECT
+          u.id,
+          u.company_id,
+          r.name AS role_name
+        FROM users u
+        JOIN user_roles ur
+          ON ur.user_id = u.id
+        JOIN roles r
+          ON r.id = ur.role_id
+        WHERE u.cognito_user_id = $1
+          AND u.status = 'active'
+        ORDER BY
+          CASE r.name
+            WHEN 'admin' THEN 1
+            WHEN 'case_manager' THEN 2
+            WHEN 'ipcm' THEN 3
+            ELSE 99
+          END
+        LIMIT 1;
+        `,
+        [claims.sub]
+      );
 
     if (currentUserResult.rowCount === 0) {
       return jsonResponse(403, {
-        message: "Authenticated user does not exist in Aurem database."
+        message:
+          "Authenticated user does not exist in Aurem database."
       });
     }
 
-    const currentUser = currentUserResult.rows[0];
+    const currentUser =
+      currentUserResult.rows[0];
+
+    if (!currentUser.company_id) {
+      return jsonResponse(403, {
+        message:
+          "Authenticated user is not associated with an Aurem company."
+      });
+    }
 
     let whereClause = "";
     const params: string[] = [];
 
-    if (currentUser.role_name === "admin") {
-      whereClause = "cm.company_id = $1";
-      params.push(currentUser.company_id ?? "");
-    } else if (currentUser.role_name === "case_manager") {
-      whereClause = "c.case_manager_user_id = $1";
-      params.push(currentUser.id);
-    } else if (currentUser.role_name === "ipcm") {
-      whereClause = "c.ip_user_id = $1";
-      params.push(currentUser.id);
+    if (
+      currentUser.role_name === "admin"
+    ) {
+      whereClause =
+        "c.company_id = $1";
+
+      params.push(
+        currentUser.company_id
+      );
+    } else if (
+      currentUser.role_name ===
+      "case_manager"
+    ) {
+      whereClause =
+        `
+        c.case_manager_user_id = $1
+        AND c.company_id = $2
+        `;
+
+      params.push(
+        currentUser.id,
+        currentUser.company_id
+      );
+    } else if (
+      currentUser.role_name === "ipcm"
+    ) {
+      whereClause =
+        `
+        c.ipcm_user_id = $1
+        AND c.company_id = $2
+        `;
+
+      params.push(
+        currentUser.id,
+        currentUser.company_id
+      );
     } else {
       return jsonResponse(403, {
-        message: "User role is not authorized to view cases."
+        message:
+          "User role is not authorized to view cases."
       });
     }
 
-    const casesResult = await pool.query<CaseRow>(
-      `
-      SELECT
-        c.id,
-        c.case_reference_id,
-        cm.first_name AS case_manager_first_name,
-        cm.last_name AS case_manager_last_name,
-        ip.first_name AS ipcm_first_name,
-        ip.last_name AS ipcm_last_name,
-        c.status
-      FROM cases c
-      JOIN users cm ON cm.id = c.case_manager_user_id
-      LEFT JOIN users ip ON ip.id = c.ip_user_id
-      WHERE ${whereClause}
-      ORDER BY c.created_at DESC;
-      `,
-      params
-    );
+    const casesResult =
+      await pool.query<CaseRow>(
+        `
+        SELECT
+          c.id,
+          c.case_reference_id,
+
+          cm.first_name
+            AS case_manager_first_name,
+
+          cm.last_name
+            AS case_manager_last_name,
+
+          ipcm.first_name
+            AS ipcm_first_name,
+
+          ipcm.last_name
+            AS ipcm_last_name,
+
+          c.status
+
+        FROM cases c
+
+        JOIN users cm
+          ON cm.id =
+            c.case_manager_user_id
+
+        LEFT JOIN users ipcm
+          ON ipcm.id =
+            c.ipcm_user_id
+
+        WHERE ${whereClause}
+
+        ORDER BY
+          c.created_at DESC;
+        `,
+        params
+      );
 
     return jsonResponse(200, {
-      cases: casesResult.rows.map((row) => ({
-        id: row.id,
-        caseReferenceId: row.case_reference_id,
-        caseManagerName: `${row.case_manager_first_name} ${row.case_manager_last_name}`,
-        ipcmName:
-          row.ipcm_first_name && row.ipcm_last_name
-            ? `${row.ipcm_first_name} ${row.ipcm_last_name}`
-            : "Unassigned",
-        status: row.status
-      }))
+      cases:
+        casesResult.rows.map(
+          (row) => ({
+            id:
+              row.id,
+
+            caseReferenceId:
+              row.case_reference_id,
+
+            caseManagerName:
+              `${row.case_manager_first_name} ${row.case_manager_last_name}`,
+
+            ipcmName:
+              row.ipcm_first_name &&
+              row.ipcm_last_name
+                ? `${row.ipcm_first_name} ${row.ipcm_last_name}`
+                : "Unassigned",
+
+            status:
+              row.status
+          })
+        )
     });
   } catch (error) {
-    console.error("GET /cases error", error);
+    console.error(
+      "GET /cases error",
+      error
+    );
 
     return jsonResponse(500, {
-      message: "Unable to load cases."
+      message:
+        "Unable to load cases."
     });
   }
 }

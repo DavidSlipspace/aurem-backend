@@ -12,20 +12,24 @@ import {
 } from "../common/response";
 
 import {
-  getCompanyIpcmPaymentProfiles,
   getSelfIpcmPaymentProfile
 } from "../services/payments/paymentMethodService";
 
 export async function handler(
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> {
+  event:
+    APIGatewayProxyEvent
+): Promise<
+  APIGatewayProxyResult
+> {
   try {
     const currentUser =
       await getCurrentUser(
         event
       );
 
-    if (!currentUser) {
+    if (
+      !currentUser
+    ) {
       return jsonResponse(
         403,
         {
@@ -36,78 +40,50 @@ export async function handler(
     }
 
     if (
-      !currentUser.companyId
+      currentUser.roleName !==
+      "ipcm"
     ) {
       return jsonResponse(
         403,
         {
           message:
-            "Your user account is not associated with an Aurem company."
+            "Only IPCM users can access payment profiles."
         }
       );
     }
 
-    if (
-      currentUser.roleName ===
-      "admin"
-    ) {
-      const ipcms =
-        await getCompanyIpcmPaymentProfiles(
-          currentUser.companyId
-        );
-
-      return jsonResponse(
-        200,
-        {
-          mode:
-            "admin",
-
-          ipcms
-        }
+    const profile =
+      await getSelfIpcmPaymentProfile(
+        currentUser.id,
+        currentUser.companyId
       );
-    }
 
     if (
-      currentUser.roleName ===
-      "ipcm"
+      !profile
     ) {
-      const profile =
-        await getSelfIpcmPaymentProfile(
-          currentUser.id,
-          currentUser.companyId
-        );
-
-      if (!profile) {
-        return jsonResponse(
-          404,
-          {
-            message:
-              "Your IPCM payment profile could not be found."
-          }
-        );
-      }
-
       return jsonResponse(
-        200,
+        404,
         {
-          mode:
-            "self",
-
-          ipcms: [
-            profile
-          ]
+          message:
+            "Your IPCM payment profile could not be found."
         }
       );
     }
 
     return jsonResponse(
-      403,
+      200,
       {
-        message:
-          "Your role is not authorized to manage payment methods."
+        mode:
+          "self",
+
+        ipcms: [
+          profile
+        ]
       }
     );
-  } catch (error) {
+  } catch (
+    error
+  ) {
     console.error(
       "GET /payment-methods failed",
       error
