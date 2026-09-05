@@ -1,4 +1,6 @@
-import type { APIGatewayProxyResult } from "aws-lambda";
+import type {
+  APIGatewayProxyResult
+} from "aws-lambda";
 
 export function jsonResponse(
   statusCode: number,
@@ -6,15 +8,24 @@ export function jsonResponse(
 ): APIGatewayProxyResult {
   return {
     statusCode,
+
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type":
+        "application/json",
+
       "Access-Control-Allow-Origin":
         "http://localhost:5173",
+
       "Access-Control-Allow-Headers":
         "Authorization,Content-Type",
+
       "Access-Control-Allow-Methods":
-        "GET,POST,PUT,OPTIONS"
+        "GET,POST,PUT,DELETE,OPTIONS"
     },
-    body: JSON.stringify(body)
+
+    body:
+      JSON.stringify(
+        body
+      )
   };
 }

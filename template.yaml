@@ -50,7 +50,7 @@ Parameters:
   FrontendBaseUrl:
     Type: String
     Default: http://localhost:5173
-    Description: Base URL used to create secure GC booking links.
+    Description: Base URL used to create secure Aurem frontend links.
 
   DuffelAccessToken:
     Type: String
@@ -293,19 +293,61 @@ Resources:
         - Key: Component
           Value: AdminTunnel
 
+  CognitoCustomMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-cognito-custom-message
+      CodeUri: .
+      Handler: customCognitoMessage.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
+      Policies:
+        - AWSLambdaBasicExecutionRole
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/customCognitoMessage.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+
+  CognitoCustomMessagePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CognitoCustomMessageFunction
+      Principal: cognito-idp.amazonaws.com
+
   UserPool:
     Type: AWS::Cognito::UserPool
+    DependsOn:
+      - CognitoCustomMessagePermission
     Properties:
       UserPoolName: aurem-dev-user-pool
       UsernameAttributes:
         - email
       AutoVerifiedAttributes:
         - email
+
+      EmailConfiguration:
+        EmailSendingAccount: DEVELOPER
+        SourceArn: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSourceEmail}
+        From: !Ref SesSourceEmail
+
+      LambdaConfig:
+        CustomMessage: !GetAtt CognitoCustomMessageFunction.Arn
+
       Schema:
         - Name: email
           AttributeDataType: String
           Required: true
           Mutable: true
+
         - Name: name
           AttributeDataType: String
           Required: true
@@ -329,7 +371,7 @@ Resources:
       Name: aurem-dev-api
       StageName: dev
       Cors:
-        AllowMethods: "'GET,POST,PUT,OPTIONS'"
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         AllowHeaders: "'Authorization,Content-Type'"
         AllowOrigin: "'http://localhost:5173'"
       Auth:
@@ -347,7 +389,7 @@ Resources:
       ResponseParameters:
         gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
-        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
 
   ApiGatewayDefault5xxResponse:
     Type: AWS::ApiGateway::GatewayResponse
@@ -357,7 +399,7 @@ Resources:
       ResponseParameters:
         gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
-        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
 
   GetUserFunction:
     Type: AWS::Serverless::Function
@@ -527,7 +569,6 @@ Resources:
         External:
           - pg-native
 
-
   UpsertPaymentMethodFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -569,7 +610,6 @@ Resources:
         Sourcemap: true
         External:
           - pg-native
-
 
   ValidateIpcmInvitationFunction:
     Type: AWS::Serverless::Function
@@ -614,7 +654,6 @@ Resources:
         Sourcemap: true
         External:
           - pg-native
-
 
   AcceptIpcmInvitationFunction:
     Type: AWS::Serverless::Function
@@ -894,6 +933,82 @@ Resources:
         External:
           - pg-native
 
+  RemoveIpcmFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - CognitoIdpVpcEndpoint
+
+    Properties:
+      FunctionName: aurem-dev-remove-ipcm
+      CodeUri: .
+      Handler: removeIpcm.handler
+      Runtime: nodejs22.x
+      Timeout: 20
+      MemorySize: 256
+
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          COGNITO_USER_POOL_ID: !Ref UserPool
+
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+        - Statement:
+            - Sid: DisableRemovedIpcm
+
+              Effect: Allow
+
+              Action:
+                - cognito-idp:AdminDisableUser
+                - cognito-idp:AdminEnableUser
+
+              Resource:
+                !GetAtt UserPool.Arn
+
+      Events:
+        RemoveIpcmApi:
+          Type: Api
+
+          Properties:
+            RestApiId:
+              !Ref AuremApi
+
+            Path:
+              /ipcms/{id}
+
+            Method:
+              DELETE
+
+    Metadata:
+      BuildMethod: esbuild
+
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/removeIpcm.ts
+
+        Minify: false
+
+        Target:
+          es2022
+
+        Sourcemap:
+          true
+
+        External:
+          - pg-native
 
   InviteIpcmFunction:
     Type: AWS::Serverless::Function
@@ -1449,9 +1564,9 @@ Outputs:
     Value: !Ref SsmVpcEndpoint
 
   SesSenderEmail:
-    Description: Amazon SES sender identity configured for trip emails.
+    Description: Amazon SES sender identity configured for transactional emails.
     Value: !Ref SesSourceEmail
 
   FrontendBookingBaseUrl:
-    Description: Frontend base URL used in GC booking emails.
+    Description: Frontend base URL used in Aurem transactional emails.
     Value: !Ref FrontendBaseUrl

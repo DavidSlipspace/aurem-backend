@@ -12,7 +12,8 @@ import {
 } from "../../db/pool";
 
 import type {
-  IpcmDirectoryItem
+  IpcmDirectoryItem,
+  IpcmPaymentSetupStatus
 } from "../../types/ipcm";
 
 type ActiveIpcmRow = {
@@ -22,6 +23,9 @@ type ActiveIpcmRow = {
   last_name: string;
 
   email: string;
+
+  payment_method_count: number;
+  active_payment_method_count: number;
 };
 
 type InvitationRow = {
@@ -96,6 +100,27 @@ function getExpirationDate():
   return expiresAt;
 }
 
+function getPaymentStatus(
+  paymentMethodCount: number,
+  activePaymentMethodCount: number
+): IpcmPaymentSetupStatus {
+  if (
+    activePaymentMethodCount >
+    0
+  ) {
+    return "configured";
+  }
+
+  if (
+    paymentMethodCount >
+    0
+  ) {
+    return "in_progress";
+  }
+
+  return "not_started";
+}
+
 export async function getCompanyIpcmDirectory(
   companyId: string
 ): Promise<IpcmDirectoryItem[]> {
@@ -109,11 +134,25 @@ export async function getCompanyIpcmDirectory(
     await Promise.all([
       pool.query<ActiveIpcmRow>(
         `
-          SELECT DISTINCT
+          SELECT
             u.id,
             u.first_name,
             u.last_name,
-            u.email
+            u.email,
+
+            COUNT(
+              pm.id
+            )::int
+              AS payment_method_count,
+
+            COUNT(
+              pm.id
+            ) FILTER (
+              WHERE
+                pm.status =
+                  'active'
+            )::int
+              AS active_payment_method_count
 
           FROM users u
 
@@ -125,6 +164,10 @@ export async function getCompanyIpcmDirectory(
             ON r.id =
               ur.role_id
 
+          LEFT JOIN ipcm_payment_methods pm
+            ON pm.user_id =
+              u.id
+
           WHERE
             u.company_id = $1
 
@@ -135,6 +178,12 @@ export async function getCompanyIpcmDirectory(
             AND
               r.name =
                 'ipcm'
+
+          GROUP BY
+            u.id,
+            u.first_name,
+            u.last_name,
+            u.email
 
           ORDER BY
             u.last_name,
@@ -199,6 +248,17 @@ export async function getCompanyIpcmDirectory(
           status:
             "active",
 
+          paymentStatus:
+            getPaymentStatus(
+              Number(
+                row.payment_method_count
+              ),
+
+              Number(
+                row.active_payment_method_count
+              )
+            ),
+
           invitationSentAt:
             null,
 
@@ -240,6 +300,9 @@ export async function getCompanyIpcmDirectory(
               now
                 ? "invited"
                 : "expired",
+
+            paymentStatus:
+              "not_started",
 
             invitationSentAt:
               row.email_sent_at ??
@@ -321,10 +384,6 @@ export async function createIpcmInvitation(
       email
     );
 
-    /*
-     * A resend always invalidates the previous
-     * active invitation for this company/email.
-     */
     await client.query(
       `
         UPDATE ipcm_invitations
@@ -487,5 +546,50 @@ export async function revokeIpcmInvitation(
     [
       invitationId
     ]
+  );
+}
+
+export async function revokeCompanyIpcmInvitation(
+  companyId: string,
+  invitationId: string
+): Promise<boolean> {
+  const result =
+    await getPool().query(
+      `
+        UPDATE ipcm_invitations
+
+        SET
+          revoked_at =
+            CURRENT_TIMESTAMP,
+
+          updated_at =
+            CURRENT_TIMESTAMP
+
+        WHERE
+          id = $1
+
+          AND
+            company_id = $2
+
+          AND
+            accepted_at
+              IS NULL
+
+          AND
+            revoked_at
+              IS NULL
+
+        RETURNING id;
+      `,
+      [
+        invitationId,
+        companyId
+      ]
+    );
+
+  return (
+    (result.rowCount ??
+      0) >
+    0
   );
 }
