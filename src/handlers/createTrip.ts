@@ -16,16 +16,23 @@ import {
 } from "../common/currentUser";
 
 type CreateTripRequest = {
-  caseId: string;
+  caseId:
+    string;
 
   travelerProfileId:
     string;
 
-  tripPurpose: string;
+  ipcmUserId:
+    string;
 
-  outboundDate: string;
+  tripPurpose:
+    string;
 
-  returnDate: string;
+  outboundDate:
+    string;
+
+  returnDate:
+    string;
 
   outboundAirport:
     string;
@@ -45,20 +52,14 @@ type CreateTripRequest = {
   minimumHotelStarRating?:
     number;
 
-  budgetFilter: number;
+  budgetFilter:
+    number;
 
   companionTraveler:
     boolean;
 
   ipcmApprovalRequired:
     boolean;
-};
-
-type CaseAccessRow = {
-  id: string;
-
-  ipcm_user_id:
-    string;
 };
 
 function buildTripReferenceId():
@@ -121,6 +122,7 @@ export async function handler(
     if (
       !body.caseId ||
       !body.travelerProfileId ||
+      !body.ipcmUserId ||
       !body.tripPurpose ||
       !body.outboundDate ||
       !body.returnDate ||
@@ -142,13 +144,10 @@ export async function handler(
       getPool();
 
     const caseAccessResult =
-      await pool.query<
-        CaseAccessRow
-      >(
+      await pool.query(
         `
         SELECT
-          c.id,
-          c.ipcm_user_id
+          c.id
 
         FROM cases c
 
@@ -181,12 +180,9 @@ export async function handler(
         ]
       );
 
-    const accessibleCase =
-      caseAccessResult
-        .rows[0];
-
     if (
-      !accessibleCase
+      caseAccessResult.rowCount ===
+      0
     ) {
       return jsonResponse(
         403,
@@ -234,6 +230,55 @@ export async function handler(
       );
     }
 
+    const ipcmAccessResult =
+      await pool.query(
+        `
+        SELECT
+          u.id
+
+        FROM users u
+
+        JOIN user_roles ur
+          ON ur.user_id =
+            u.id
+
+        JOIN roles r
+          ON r.id =
+            ur.role_id
+
+        WHERE
+          u.id = $1
+
+          AND
+          u.company_id = $2
+
+          AND
+          u.status = 'active'
+
+          AND
+          r.name = 'ipcm'
+
+        LIMIT 1;
+        `,
+        [
+          body.ipcmUserId,
+          currentUser.companyId
+        ]
+      );
+
+    if (
+      ipcmAccessResult.rowCount ===
+      0
+    ) {
+      return jsonResponse(
+        400,
+        {
+          message:
+            "Selected IPCM was not found or is inactive."
+        }
+      );
+    }
+
     const result =
       await pool.query(
         `
@@ -256,6 +301,7 @@ export async function handler(
           companion_traveler,
           ipcm_approval_required
         )
+
         VALUES (
           $1,
           $2,
@@ -275,6 +321,7 @@ export async function handler(
           $15,
           $16
         )
+
         RETURNING
           id,
           trip_reference_id;
@@ -286,8 +333,7 @@ export async function handler(
 
           body.travelerProfileId,
 
-          accessibleCase
-            .ipcm_user_id,
+          body.ipcmUserId,
 
           body.tripPurpose,
 

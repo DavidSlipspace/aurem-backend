@@ -39,15 +39,20 @@ export async function handler(
       );
     }
 
+    const canViewDirectory =
+      currentUser.roleName ===
+        "admin" ||
+      currentUser.roleName ===
+        "case_manager";
+
     if (
-      currentUser.roleName !==
-      "admin"
+      !canViewDirectory
     ) {
       return jsonResponse(
         403,
         {
           message:
-            "Only Administrators can view IPCM administration."
+            "Your role is not authorized to view IPCM profiles."
         }
       );
     }
@@ -61,7 +66,8 @@ export async function handler(
       200,
       {
         canInvite:
-          true,
+          currentUser.roleName ===
+          "admin",
 
         ipcms
       }
