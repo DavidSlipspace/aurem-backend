@@ -16,8 +16,7 @@ import {
 } from "../common/currentUser";
 
 type UpdateTripRequest = {
-  caseId:
-    string;
+  caseId: string;
 
   travelerProfileId:
     string;
@@ -171,6 +170,7 @@ export async function handler(
           AND (
             (
               $2 = 'admin'
+
               AND
               c.company_id = $3
             )
@@ -179,6 +179,7 @@ export async function handler(
 
             (
               $2 = 'case_manager'
+
               AND
               c.case_manager_user_id = $4
             )
@@ -224,6 +225,7 @@ export async function handler(
           AND (
             (
               $2 = 'admin'
+
               AND
               c.company_id = $3
             )
@@ -232,6 +234,7 @@ export async function handler(
 
             (
               $2 = 'case_manager'
+
               AND
               c.case_manager_user_id = $4
             )
@@ -266,7 +269,8 @@ export async function handler(
     const travelerResult =
       await pool.query(
         `
-        SELECT id
+        SELECT
+          id
 
         FROM traveler_profiles
 
@@ -400,7 +404,8 @@ export async function handler(
           id = $17
 
         RETURNING
-          id;
+          id,
+          ipcm_user_id;
         `,
         [
           body.caseId,
@@ -464,6 +469,10 @@ export async function handler(
       {
         id:
           result.rows[0].id,
+
+        ipcmUserId:
+          result.rows[0]
+            .ipcm_user_id,
 
         message:
           "Trip updated."

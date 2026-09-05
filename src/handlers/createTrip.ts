@@ -16,8 +16,7 @@ import {
 } from "../common/currentUser";
 
 type CreateTripRequest = {
-  caseId:
-    string;
+  caseId: string;
 
   travelerProfileId:
     string;
@@ -157,6 +156,7 @@ export async function handler(
           AND (
             (
               $2 = 'admin'
+
               AND
               c.company_id = $3
             )
@@ -165,6 +165,7 @@ export async function handler(
 
             (
               $2 = 'case_manager'
+
               AND
               c.case_manager_user_id = $4
             )
@@ -174,8 +175,11 @@ export async function handler(
         `,
         [
           body.caseId,
+
           currentUser.roleName,
+
           currentUser.companyId,
+
           currentUser.id
         ]
       );
@@ -196,7 +200,8 @@ export async function handler(
     const travelerAccessResult =
       await pool.query(
         `
-        SELECT id
+        SELECT
+          id
 
         FROM traveler_profiles
 
@@ -213,6 +218,7 @@ export async function handler(
         `,
         [
           body.travelerProfileId,
+
           currentUser.companyId
         ]
       );
@@ -262,6 +268,7 @@ export async function handler(
         `,
         [
           body.ipcmUserId,
+
           currentUser.companyId
         ]
       );
