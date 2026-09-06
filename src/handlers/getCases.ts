@@ -3,90 +3,99 @@ import type {
   APIGatewayProxyResult
 } from "aws-lambda";
 
-import { getPool } from "../db/pool";
-import { getCognitoClaims } from "../common/auth";
-import { jsonResponse } from "../common/response";
+import {
+  getPool
+} from "../db/pool";
 
-type CurrentUserRow = {
-  id: string;
-  company_id: string | null;
-  role_name: string;
-};
+import {
+  getCurrentUser
+} from "../common/currentUser";
+
+import {
+  jsonResponse
+} from "../common/response";
 
 type CaseRow = {
   id: string;
-  case_reference_id: string;
-  case_manager_first_name: string;
-  case_manager_last_name: string;
-  ipcm_first_name: string | null;
-  ipcm_last_name: string | null;
+
+  case_reference_id:
+    string;
+
+  case_manager_user_id:
+    string;
+
+  case_manager_first_name:
+    string;
+
+  case_manager_last_name:
+    string;
+
+  ipcm_user_id:
+    string;
+
+  ipcm_first_name:
+    string;
+
+  ipcm_last_name:
+    string;
+
+  suggested_budget_cents:
+    number |
+    null;
+
+  approved_budget_cents:
+    number |
+    null;
+
   status: string;
 };
 
 export async function handler(
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> {
+  event:
+    APIGatewayProxyEvent
+): Promise<
+  APIGatewayProxyResult
+> {
   try {
-    const claims = getCognitoClaims(event);
-    const pool = getPool();
-
-    const currentUserResult =
-      await pool.query<CurrentUserRow>(
-        `
-        SELECT
-          u.id,
-          u.company_id,
-          r.name AS role_name
-        FROM users u
-        JOIN user_roles ur
-          ON ur.user_id = u.id
-        JOIN roles r
-          ON r.id = ur.role_id
-        WHERE u.cognito_user_id = $1
-          AND u.status = 'active'
-        ORDER BY
-          CASE r.name
-            WHEN 'admin' THEN 1
-            WHEN 'case_manager' THEN 2
-            WHEN 'ipcm' THEN 3
-            ELSE 99
-          END
-        LIMIT 1;
-        `,
-        [claims.sub]
+    const currentUser =
+      await getCurrentUser(
+        event
       );
 
-    if (currentUserResult.rowCount === 0) {
-      return jsonResponse(403, {
-        message:
-          "Authenticated user does not exist in Aurem database."
-      });
+    if (
+      !currentUser
+    ) {
+      return jsonResponse(
+        403,
+        {
+          message:
+            "Authenticated user does not exist in Aurem database."
+        }
+      );
     }
 
-    const currentUser =
-      currentUserResult.rows[0];
+    let whereClause =
+      "";
 
-    if (!currentUser.company_id) {
-      return jsonResponse(403, {
-        message:
-          "Authenticated user is not associated with an Aurem company."
-      });
-    }
-
-    let whereClause = "";
-    const params: string[] = [];
+    const params:
+      string[] =
+        [];
 
     if (
-      currentUser.role_name === "admin"
+      currentUser
+        .roleName ===
+      "admin"
     ) {
       whereClause =
         "c.company_id = $1";
 
       params.push(
-        currentUser.company_id
+        currentUser
+          .companyId
       );
     } else if (
-      currentUser.role_name ===
+      currentUser
+        .roleName ===
       "case_manager"
     ) {
       whereClause =
@@ -97,10 +106,13 @@ export async function handler(
 
       params.push(
         currentUser.id,
-        currentUser.company_id
+        currentUser
+          .companyId
       );
     } else if (
-      currentUser.role_name === "ipcm"
+      currentUser
+        .roleName ===
+      "ipcm"
     ) {
       whereClause =
         `
@@ -110,87 +122,142 @@ export async function handler(
 
       params.push(
         currentUser.id,
-        currentUser.company_id
+        currentUser
+          .companyId
       );
     } else {
-      return jsonResponse(403, {
-        message:
-          "User role is not authorized to view cases."
-      });
+      return jsonResponse(
+        403,
+        {
+          message:
+            "User role is not authorized to view cases."
+        }
+      );
     }
 
-    const casesResult =
-      await pool.query<CaseRow>(
-        `
-        SELECT
-          c.id,
-          c.case_reference_id,
+    const result =
+      await getPool()
+        .query<
+          CaseRow
+        >(
+          `
+          SELECT
+            c.id,
 
-          cm.first_name
-            AS case_manager_first_name,
+            c.case_reference_id,
 
-          cm.last_name
-            AS case_manager_last_name,
+            c.case_manager_user_id,
 
-          ipcm.first_name
-            AS ipcm_first_name,
+            cm.first_name
+              AS case_manager_first_name,
 
-          ipcm.last_name
-            AS ipcm_last_name,
+            cm.last_name
+              AS case_manager_last_name,
 
-          c.status
+            c.ipcm_user_id,
 
-        FROM cases c
+            ipcm.first_name
+              AS ipcm_first_name,
 
-        JOIN users cm
-          ON cm.id =
-            c.case_manager_user_id
+            ipcm.last_name
+              AS ipcm_last_name,
 
-        LEFT JOIN users ipcm
-          ON ipcm.id =
-            c.ipcm_user_id
+            c.suggested_budget_cents,
 
-        WHERE ${whereClause}
+            c.approved_budget_cents,
 
-        ORDER BY
-          c.created_at DESC;
-        `,
-        params
-      );
+            c.status
 
-    return jsonResponse(200, {
-      cases:
-        casesResult.rows.map(
-          (row) => ({
-            id:
-              row.id,
+          FROM cases c
 
-            caseReferenceId:
-              row.case_reference_id,
+          JOIN users cm
+            ON cm.id =
+              c.case_manager_user_id
 
-            caseManagerName:
-              `${row.case_manager_first_name} ${row.case_manager_last_name}`,
+          JOIN users ipcm
+            ON ipcm.id =
+              c.ipcm_user_id
 
-            ipcmName:
-              row.ipcm_first_name &&
-              row.ipcm_last_name
-                ? `${row.ipcm_first_name} ${row.ipcm_last_name}`
-                : "Unassigned",
+          WHERE
+            ${whereClause}
 
-            status:
-              row.status
-          })
-        )
-    });
-  } catch (error) {
+          ORDER BY
+            c.created_at DESC;
+          `,
+          params
+        );
+
+    return jsonResponse(
+      200,
+      {
+        cases:
+          result.rows.map(
+            (
+              row
+            ) => ({
+              id:
+                row.id,
+
+              caseReferenceId:
+                row
+                  .case_reference_id,
+
+              caseManagerUserId:
+                row
+                  .case_manager_user_id,
+
+              caseManagerName:
+                `${row.case_manager_first_name} ${row.case_manager_last_name}`
+                  .trim(),
+
+              ipcmUserId:
+                row
+                  .ipcm_user_id,
+
+              ipcmName:
+                `${row.ipcm_first_name} ${row.ipcm_last_name}`
+                  .trim(),
+
+              suggestedBudgetCents:
+                row
+                  .suggested_budget_cents ===
+                null
+                  ? null
+                  : Number(
+                      row
+                        .suggested_budget_cents
+                    ),
+
+              approvedBudgetCents:
+                row
+                  .approved_budget_cents ===
+                null
+                  ? null
+                  : Number(
+                      row
+                        .approved_budget_cents
+                    ),
+
+              status:
+                row.status
+            })
+          )
+      }
+    );
+  } catch (
+    error
+  ) {
     console.error(
       "GET /cases error",
       error
     );
 
-    return jsonResponse(500, {
-      message:
-        "Unable to load cases."
-    });
+    return jsonResponse(
+      500,
+      {
+        message:
+          "Unable to load cases."
+      }
+    );
   }
 }

@@ -485,6 +485,194 @@ Resources:
         External:
           - pg-native
 
+  GetCaseOptionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-get-case-options
+      CodeUri: .
+      Handler: getCaseOptions.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        GetCaseOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /cases/options
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/getCaseOptions.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  CreateCaseFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-create-case
+      CodeUri: .
+      Handler: createCase.handler
+      Runtime: nodejs22.x
+      Timeout: 15
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          EMAIL_SERVICE_FUNCTION_NAME: !Ref EmailServiceFunction
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeEmailServiceForCaseAssignment
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt EmailServiceFunction.Arn
+      Events:
+        CreateCase:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /cases
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/createCase.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  UpdateCaseFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-update-case
+      CodeUri: .
+      Handler: updateCase.handler
+      Runtime: nodejs22.x
+      Timeout: 15
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          EMAIL_SERVICE_FUNCTION_NAME: !Ref EmailServiceFunction
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeEmailServiceForCaseReassignment
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt EmailServiceFunction.Arn
+      Events:
+        UpdateCase:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /cases/{id}
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/updateCase.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  UpdateCaseBudgetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-update-case-budget
+      CodeUri: .
+      Handler: updateCaseBudget.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        UpdateCaseBudget:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /cases/{id}/budget
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/updateCaseBudget.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
   GetTravelerProfilesFunction:
     Type: AWS::Serverless::Function
     Properties:
