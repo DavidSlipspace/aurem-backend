@@ -14,9 +14,17 @@ import {
   randomUUID
 } from "node:crypto";
 
-import { getPool } from "../db/pool";
-import { jsonResponse } from "../common/response";
-import { getCurrentUser } from "../common/currentUser";
+import {
+  getPool
+} from "../db/pool";
+
+import {
+  jsonResponse
+} from "../common/response";
+
+import {
+  getCurrentUser
+} from "../common/currentUser";
 
 import type {
   SendEmailRequest,
@@ -25,45 +33,113 @@ import type {
 
 type TripEmailRow = {
   id: string;
-  trip_reference_id: string;
-  traveler_profile_id: string;
-  traveler_first_name: string;
-  traveler_last_name: string;
-  traveler_email: string | null;
+
+  trip_reference_id:
+    string;
+
+  traveler_profile_id:
+    string;
+
+  traveler_first_name:
+    string;
+
+  traveler_last_name:
+    string;
+
+  traveler_email:
+    | string
+    | null;
+
+  budget_filter:
+    number;
+
+  approved_budget_cents:
+    | number
+    | null;
+
+  allocated_budget_cents:
+    | number
+    | string;
 };
 
-const BOOKING_LINK_EXPIRATION_DAYS = 7;
+const BOOKING_LINK_EXPIRATION_DAYS =
+  7;
 
-const lambdaClient = new LambdaClient({});
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
+const lambdaClient =
+  new LambdaClient({});
 
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const textEncoder =
+  new TextEncoder();
+
+const textDecoder =
+  new TextDecoder();
+
+function isValidEmail(
+  email: string
+): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    email
+  );
 }
 
-function escapeHtml(value: string): string {
+function escapeHtml(
+  value: string
+): string {
   return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
 }
 
-function normalizeFrontendBaseUrl(value: string): string {
-  return value.trim().replace(/\/+$/, "");
+function normalizeFrontendBaseUrl(
+  value: string
+): string {
+  return value
+    .trim()
+    .replace(
+      /\/+$/,
+      ""
+    );
 }
 
 function createBookingToken(): {
   rawToken: string;
   tokenHash: string;
 } {
-  const rawToken = randomBytes(32).toString("base64url");
+  const rawToken =
+    randomBytes(
+      32
+    ).toString(
+      "base64url"
+    );
 
-  const tokenHash = createHash("sha256")
-    .update(rawToken)
-    .digest("hex");
+  const tokenHash =
+    createHash(
+      "sha256"
+    )
+      .update(
+        rawToken
+      )
+      .digest(
+        "hex"
+      );
 
   return {
     rawToken,
@@ -71,53 +147,81 @@ function createBookingToken(): {
   };
 }
 
-function getExpirationDate(): Date {
-  const expiresAt = new Date();
+function getExpirationDate():
+  Date {
+  const expiresAt =
+    new Date();
 
   expiresAt.setUTCDate(
-    expiresAt.getUTCDate() + BOOKING_LINK_EXPIRATION_DAYS
+    expiresAt.getUTCDate() +
+      BOOKING_LINK_EXPIRATION_DAYS
   );
 
   return expiresAt;
 }
 
-function getErrorDetails(error: unknown): {
+function getErrorDetails(
+  error: unknown
+): {
   name: string;
   message: string;
   stack?: string;
 } {
-  if (error instanceof Error) {
+  if (
+    error instanceof Error
+  ) {
     return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
+      name:
+        error.name,
+
+      message:
+        error.message,
+
+      stack:
+        error.stack
     };
   }
 
   return {
-    name: "UnknownError",
-    message: String(error)
+    name:
+      "UnknownError",
+
+    message:
+      String(
+        error
+      )
   };
 }
 
 function parseEmailServiceResult(
-  payload: Uint8Array | undefined
+  payload:
+    | Uint8Array
+    | undefined
 ): SendEmailResult {
-  if (!payload) {
+  if (
+    !payload
+  ) {
     throw new Error(
       "The email service returned an empty response."
     );
   }
 
-  const decodedPayload = textDecoder.decode(payload);
+  const decodedPayload =
+    textDecoder.decode(
+      payload
+    );
 
-  const parsedPayload = JSON.parse(
-    decodedPayload
-  ) as Partial<SendEmailResult>;
+  const parsedPayload =
+    JSON.parse(
+      decodedPayload
+    ) as
+      Partial<SendEmailResult>;
 
   if (
-    typeof parsedPayload.messageId !== "string" ||
-    parsedPayload.messageId.length === 0
+    typeof parsedPayload.messageId !==
+      "string" ||
+    parsedPayload.messageId.length ===
+      0
   ) {
     throw new Error(
       "The email service response did not contain a message ID."
@@ -125,7 +229,8 @@ function parseEmailServiceResult(
   }
 
   return {
-    messageId: parsedPayload.messageId
+    messageId:
+      parsedPayload.messageId
   };
 }
 
@@ -149,7 +254,9 @@ function createTextEmail(
     "If you were not expecting this email, you can safely ignore it.",
     "",
     "Aurem Travel"
-  ].join("\n");
+  ].join(
+    "\n"
+  );
 }
 
 function createHtmlEmail(
@@ -157,22 +264,35 @@ function createHtmlEmail(
   tripReferenceId: string,
   bookingUrl: string
 ): string {
-  const safeTravelerName = escapeHtml(travelerName);
-  const safeTripReferenceId = escapeHtml(
-    tripReferenceId
-  );
-  const safeBookingUrl = escapeHtml(bookingUrl);
+  const safeTravelerName =
+    escapeHtml(
+      travelerName
+    );
+
+  const safeTripReferenceId =
+    escapeHtml(
+      tripReferenceId
+    );
+
+  const safeBookingUrl =
+    escapeHtml(
+      bookingUrl
+    );
 
   return `
     <!DOCTYPE html>
     <html lang="en">
       <head>
         <meta charset="UTF-8" />
+
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1.0"
         />
-        <title>Your Aurem travel request</title>
+
+        <title>
+          Your Aurem travel request
+        </title>
       </head>
 
       <body
@@ -190,12 +310,16 @@ function createHtmlEmail(
           cellspacing="0"
           cellpadding="0"
           border="0"
-          style="background-color: #f4f6f8;"
+          style="
+            background-color: #f4f6f8;
+          "
         >
           <tr>
             <td
               align="center"
-              style="padding: 40px 16px;"
+              style="
+                padding: 40px 16px;
+              "
             >
               <table
                 role="presentation"
@@ -243,7 +367,11 @@ function createHtmlEmail(
                 </tr>
 
                 <tr>
-                  <td style="padding: 36px 32px;">
+                  <td
+                    style="
+                      padding: 36px 32px;
+                    "
+                  >
                     <h1
                       style="
                         margin: 0 0 16px;
@@ -282,7 +410,11 @@ function createHtmlEmail(
                       "
                     >
                       <tr>
-                        <td style="padding: 18px 20px;">
+                        <td
+                          style="
+                            padding: 18px 20px;
+                          "
+                        >
                           <p
                             style="
                               margin: 0 0 6px;
@@ -412,192 +544,464 @@ function createHtmlEmail(
 }
 
 export async function handler(
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> {
-  console.log("1. Send-trip-booking-link handler started", {
-    requestId: event.requestContext.requestId,
-    httpMethod: event.httpMethod,
-    path: event.path,
-    pathParameters: event.pathParameters
-  });
+  event:
+    APIGatewayProxyEvent
+): Promise<
+  APIGatewayProxyResult
+> {
+  console.log(
+    "Send-trip-booking-link handler started",
+    {
+      requestId:
+        event.requestContext.requestId,
 
-  let createdBookingLinkId: string | null = null;
+      httpMethod:
+        event.httpMethod,
+
+      path:
+        event.path,
+
+      pathParameters:
+        event.pathParameters
+    }
+  );
+
+  let createdBookingLinkId:
+    | string
+    | null =
+      null;
 
   try {
-    const currentUser = await getCurrentUser(event);
+    const currentUser =
+      await getCurrentUser(
+        event
+      );
 
-    if (!currentUser) {
-      return jsonResponse(403, {
-        message:
-          "Authenticated user does not exist in the Aurem database."
-      });
+    if (
+      !currentUser
+    ) {
+      return jsonResponse(
+        403,
+        {
+          message:
+            "Authenticated user does not exist in the Aurem database."
+        }
+      );
     }
 
     if (
-      currentUser.roleName !== "admin" &&
-      currentUser.roleName !== "case_manager"
+      ![
+        "admin",
+        "case_manager",
+        "ipcm"
+      ].includes(
+        currentUser.roleName
+      )
     ) {
-      return jsonResponse(403, {
-        message:
-          "User role is not authorized to send trip emails."
-      });
+      return jsonResponse(
+        403,
+        {
+          message:
+            "User role is not authorized to send trip emails."
+        }
+      );
     }
 
     const tripId =
-      event.pathParameters?.id ??
-      event.pathParameters?.tripId;
+      event.pathParameters
+        ?.id ??
+      event.pathParameters
+        ?.tripId;
 
-    if (!tripId) {
-      return jsonResponse(400, {
-        message: "Trip ID is required."
-      });
+    if (
+      !tripId
+    ) {
+      return jsonResponse(
+        400,
+        {
+          message:
+            "Trip ID is required."
+        }
+      );
     }
 
-    const emailServiceFunctionName =
-      process.env.EMAIL_SERVICE_FUNCTION_NAME;
+    const pool =
+      getPool();
 
-    if (!emailServiceFunctionName) {
-      return jsonResponse(500, {
-        message:
-          "The email service has not been configured."
-      });
-    }
+    let accessClause:
+      string;
 
-    const frontendBaseUrlValue =
-      process.env.FRONTEND_BASE_URL;
+    const params:
+      string[] =
+        [
+          tripId
+        ];
 
-    if (!frontendBaseUrlValue) {
-      return jsonResponse(500, {
-        message:
-          "The frontend booking URL has not been configured."
-      });
-    }
+    if (
+      currentUser.roleName ===
+      "admin"
+    ) {
+      accessClause =
+        "c.company_id = $2";
 
-    const frontendBaseUrl =
-      normalizeFrontendBaseUrl(frontendBaseUrlValue);
-
-    const pool = getPool();
-
-    let accessClause: string;
-    const params: string[] = [tripId];
-
-    if (currentUser.roleName === "admin") {
-      accessClause = "cm.company_id = $2";
-      params.push(currentUser.companyId);
+      params.push(
+        currentUser.companyId
+      );
     } else {
       accessClause =
-        "c.case_manager_user_id = $2";
-      params.push(currentUser.id);
+        "c.ipcm_user_id = $2";
+
+      params.push(
+        currentUser.id
+      );
     }
 
-    const result = await pool.query<TripEmailRow>(
-      `
+    const result =
+      await pool.query<
+        TripEmailRow
+      >(
+        `
         SELECT
           t.id,
+
           t.trip_reference_id,
+
           t.traveler_profile_id,
-          gp.legal_first_name AS traveler_first_name,
-          gp.legal_last_name AS traveler_last_name,
-          gp.email AS traveler_email
+
+          tp.legal_first_name
+            AS traveler_first_name,
+
+          tp.legal_last_name
+            AS traveler_last_name,
+
+          tp.email
+            AS traveler_email,
+
+          t.budget_filter,
+
+          c.approved_budget_cents,
+
+          COALESCE(
+            (
+              SELECT
+                SUM(
+                  COALESCE(
+                    case_trip.budget_filter,
+                    0
+                  )
+                )
+
+              FROM trips case_trip
+
+              WHERE
+                case_trip.case_id =
+                  c.id
+            ),
+            0
+          )
+            AS allocated_budget_cents
+
         FROM trips t
+
         JOIN cases c
-          ON c.id = t.case_id
-        JOIN users cm
-          ON cm.id = c.case_manager_user_id
-        JOIN traveler_profiles gp
-          ON gp.id = t.traveler_profile_id
+          ON c.id =
+            t.case_id
+
+        JOIN traveler_profiles tp
+          ON tp.id =
+            t.traveler_profile_id
+
         WHERE
           t.id = $1
-          AND ${accessClause}
+
+          AND
+          ${accessClause}
+
         LIMIT 1;
-      `,
-      params
-    );
+        `,
+        params
+      );
 
-    const trip = result.rows[0];
+    const trip =
+      result.rows[0];
 
-    if (!trip) {
-      return jsonResponse(404, {
-        message:
-          "Trip was not found or you do not have access to it."
-      });
+    if (
+      !trip
+    ) {
+      return jsonResponse(
+        404,
+        {
+          message:
+            "Trip was not found or you do not have access to it."
+        }
+      );
+    }
+
+    const tripBudgetCents =
+      Number(
+        trip.budget_filter
+      );
+
+    const caseBudgetCents =
+      trip.approved_budget_cents ===
+        null
+        ? null
+        : Number(
+            trip.approved_budget_cents
+          );
+
+    const allocatedBudgetCents =
+      Number(
+        trip.allocated_budget_cents
+      );
+
+    if (
+      !Number.isFinite(
+        tripBudgetCents
+      ) ||
+      tripBudgetCents <=
+        0
+    ) {
+      return jsonResponse(
+        400,
+        {
+          message:
+            "A trip budget must be set before this trip can be sent to the traveler."
+        }
+      );
+    }
+
+    if (
+      caseBudgetCents ===
+        null ||
+      !Number.isFinite(
+        caseBudgetCents
+      ) ||
+      caseBudgetCents <=
+        0
+    ) {
+      return jsonResponse(
+        400,
+        {
+          message:
+            "The Case Manager must set an approved case budget before this trip can be sent to the traveler."
+        }
+      );
+    }
+
+    if (
+      !Number.isFinite(
+        allocatedBudgetCents
+      )
+    ) {
+      return jsonResponse(
+        500,
+        {
+          message:
+            "Unable to validate the case budget allocation."
+        }
+      );
+    }
+
+    if (
+      allocatedBudgetCents >
+      caseBudgetCents
+    ) {
+      const formattedCaseBudget =
+        new Intl.NumberFormat(
+          "en-US",
+          {
+            style:
+              "currency",
+
+            currency:
+              "USD"
+          }
+        ).format(
+          caseBudgetCents /
+            100
+        );
+
+      const formattedAllocatedBudget =
+        new Intl.NumberFormat(
+          "en-US",
+          {
+            style:
+              "currency",
+
+            currency:
+              "USD"
+          }
+        ).format(
+          allocatedBudgetCents /
+            100
+        );
+
+      return jsonResponse(
+        400,
+        {
+          message:
+            `The trip cannot be sent because ${formattedAllocatedBudget} is currently allocated across trips for this case, which exceeds the approved case budget of ${formattedCaseBudget}. Update the trip budgets before sending the traveler email.`
+        }
+      );
     }
 
     if (
       !trip.traveler_email ||
-      !isValidEmail(trip.traveler_email)
+      !isValidEmail(
+        trip.traveler_email
+      )
     ) {
-      return jsonResponse(400, {
-        message:
-          "The GC profile does not have a valid email address."
-      });
+      return jsonResponse(
+        400,
+        {
+          message:
+            "The traveler profile does not have a valid email address."
+        }
+      );
     }
 
+    /*
+     * Configuration checks intentionally happen after
+     * business validation. This allows the user to see
+     * useful trip/case validation errors first.
+     */
+    const emailServiceFunctionName =
+      process.env
+        .EMAIL_SERVICE_FUNCTION_NAME;
+
+    if (
+      !emailServiceFunctionName
+    ) {
+      return jsonResponse(
+        500,
+        {
+          message:
+            "The email service has not been configured."
+        }
+      );
+    }
+
+    const frontendBaseUrlValue =
+      process.env
+        .FRONTEND_BASE_URL;
+
+    if (
+      !frontendBaseUrlValue
+    ) {
+      return jsonResponse(
+        500,
+        {
+          message:
+            "The frontend booking URL has not been configured."
+        }
+      );
+    }
+
+    const frontendBaseUrl =
+      normalizeFrontendBaseUrl(
+        frontendBaseUrlValue
+      );
+
     const travelerName =
-      `${trip.traveler_first_name} ${trip.traveler_last_name}`.trim();
+      `${trip.traveler_first_name} ${trip.traveler_last_name}`
+        .trim();
 
     const {
       rawToken,
       tokenHash
-    } = createBookingToken();
+    } =
+      createBookingToken();
 
-    const bookingLinkId = randomUUID();
-    const expiresAt = getExpirationDate();
+    const bookingLinkId =
+      randomUUID();
 
-    createdBookingLinkId = bookingLinkId;
+    const expiresAt =
+      getExpirationDate();
 
-    const client = await pool.connect();
+    createdBookingLinkId =
+      bookingLinkId;
+
+    const client =
+      await pool.connect();
 
     try {
-      await client.query("BEGIN");
-
       await client.query(
-        `
-          UPDATE booking_links
-          SET
-            revoked_at = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE
-            trip_id = $1
-            AND revoked_at IS NULL
-            AND used_at IS NULL;
-        `,
-        [trip.id]
+        "BEGIN"
       );
 
       await client.query(
         `
-          INSERT INTO booking_links (
-            id,
-            trip_id,
-            traveler_profile_id,
-            token_hash,
-            expires_at,
-            created_at,
-            updated_at
-          )
-          VALUES (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
+        UPDATE booking_links
+
+        SET
+          revoked_at =
             CURRENT_TIMESTAMP,
+
+          updated_at =
             CURRENT_TIMESTAMP
-          );
+
+        WHERE
+          trip_id = $1
+
+          AND
+          revoked_at
+            IS NULL
+
+          AND
+          used_at
+            IS NULL;
+        `,
+        [
+          trip.id
+        ]
+      );
+
+      await client.query(
+        `
+        INSERT INTO booking_links (
+          id,
+          trip_id,
+          traveler_profile_id,
+          token_hash,
+          expires_at,
+          created_at,
+          updated_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          CURRENT_TIMESTAMP,
+          CURRENT_TIMESTAMP
+        );
         `,
         [
           bookingLinkId,
+
           trip.id,
+
           trip.traveler_profile_id,
+
           tokenHash,
+
           expiresAt
         ]
       );
 
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK");
+      await client.query(
+        "COMMIT"
+      );
+    } catch (
+      error
+    ) {
+      await client.query(
+        "ROLLBACK"
+      );
+
       throw error;
     } finally {
       client.release();
@@ -606,109 +1010,182 @@ export async function handler(
     const bookingUrl =
       `${frontendBaseUrl}/booking/${rawToken}`;
 
-    const emailRequest: SendEmailRequest = {
-      to: trip.traveler_email,
-      subject:
-        "Your Aurem travel request is ready",
-      textBody: createTextEmail(
-        travelerName,
-        trip.trip_reference_id,
-        bookingUrl
-      ),
-      htmlBody: createHtmlEmail(
-        travelerName,
-        trip.trip_reference_id,
-        bookingUrl
-      )
-    };
+    const emailRequest:
+      SendEmailRequest =
+        {
+          to:
+            trip.traveler_email,
 
-    const invokeResponse = await lambdaClient.send(
-      new InvokeCommand({
-        FunctionName: emailServiceFunctionName,
-        InvocationType: "RequestResponse",
-        Payload: textEncoder.encode(
-          JSON.stringify(emailRequest)
-        )
-      })
-    );
+          subject:
+            "Your Aurem travel request is ready",
 
-    if (invokeResponse.FunctionError) {
-      const errorPayload = invokeResponse.Payload
-        ? textDecoder.decode(invokeResponse.Payload)
-        : "No error payload returned.";
+          textBody:
+            createTextEmail(
+              travelerName,
+              trip.trip_reference_id,
+              bookingUrl
+            ),
+
+          htmlBody:
+            createHtmlEmail(
+              travelerName,
+              trip.trip_reference_id,
+              bookingUrl
+            )
+        };
+
+    const invokeResponse =
+      await lambdaClient.send(
+        new InvokeCommand({
+          FunctionName:
+            emailServiceFunctionName,
+
+          InvocationType:
+            "RequestResponse",
+
+          Payload:
+            textEncoder.encode(
+              JSON.stringify(
+                emailRequest
+              )
+            )
+        })
+      );
+
+    if (
+      invokeResponse.FunctionError
+    ) {
+      const errorPayload =
+        invokeResponse.Payload
+          ? textDecoder.decode(
+              invokeResponse.Payload
+            )
+          : "No error payload returned.";
 
       throw new Error(
         `Email service failed: ${errorPayload}`
       );
     }
 
-    const emailResult = parseEmailServiceResult(
-      invokeResponse.Payload
-    );
+    const emailResult =
+      parseEmailServiceResult(
+        invokeResponse.Payload
+      );
 
-    return jsonResponse(200, {
-      message:
-        "Secure booking link sent successfully.",
-      tripId: trip.id,
-      tripReferenceId: trip.trip_reference_id,
-      bookingLinkId,
-      expiresAt: expiresAt.toISOString(),
-      sentTo: trip.traveler_email,
-      travelerName,
-      messageId: emailResult.messageId
-    });
-  } catch (error) {
-    const errorDetails = getErrorDetails(error);
+    return jsonResponse(
+      200,
+      {
+        message:
+          "Secure booking link sent successfully.",
+
+        tripId:
+          trip.id,
+
+        tripReferenceId:
+          trip.trip_reference_id,
+
+        bookingLinkId,
+
+        expiresAt:
+          expiresAt.toISOString(),
+
+        sentTo:
+          trip.traveler_email,
+
+        travelerName,
+
+        messageId:
+          emailResult.messageId
+      }
+    );
+  } catch (
+    error
+  ) {
+    const errorDetails =
+      getErrorDetails(
+        error
+      );
 
     console.error(
       "POST /trips/{id}/booking-link failed",
       errorDetails
     );
 
-    if (createdBookingLinkId) {
+    if (
+      createdBookingLinkId
+    ) {
       try {
         await getPool().query(
           `
-            UPDATE booking_links
-            SET
-              revoked_at = CURRENT_TIMESTAMP,
-              updated_at = CURRENT_TIMESTAMP
-            WHERE id = $1;
+          UPDATE booking_links
+
+          SET
+            revoked_at =
+              CURRENT_TIMESTAMP,
+
+            updated_at =
+              CURRENT_TIMESTAMP
+
+          WHERE
+            id = $1;
           `,
-          [createdBookingLinkId]
+          [
+            createdBookingLinkId
+          ]
         );
-      } catch (cleanupError) {
+      } catch (
+        cleanupError
+      ) {
         console.error(
           "Unable to revoke failed booking link",
-          getErrorDetails(cleanupError)
+          getErrorDetails(
+            cleanupError
+          )
         );
       }
     }
 
     if (
-      errorDetails.name === "AccessDeniedException"
+      errorDetails.name ===
+      "AccessDeniedException"
     ) {
-      return jsonResponse(500, {
-        message:
-          "The booking-link Lambda does not have permission to invoke the email service.",
-        error: errorDetails.name
-      });
+      return jsonResponse(
+        500,
+        {
+          message:
+            "The booking-link Lambda does not have permission to invoke the email service.",
+
+          error:
+            errorDetails.name
+        }
+      );
     }
 
     if (
-      errorDetails.name === "ResourceNotFoundException"
+      errorDetails.name ===
+      "ResourceNotFoundException"
     ) {
-      return jsonResponse(500, {
-        message:
-          "The configured email service Lambda could not be found.",
-        error: errorDetails.name
-      });
+      return jsonResponse(
+        500,
+        {
+          message:
+            "The configured email service Lambda could not be found.",
+
+          error:
+            errorDetails.name
+        }
+      );
     }
 
-    return jsonResponse(500, {
-      message:
-        "Unable to create and send the booking link.",
-      error: errorDetails.name
-    });
+    return jsonResponse(
+      500,
+      {
+        message:
+          "Unable to create and send the booking link.",
+
+        error:
+          errorDetails.name
+      }
+    );
   }
 }
