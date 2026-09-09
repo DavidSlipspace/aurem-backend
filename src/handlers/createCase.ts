@@ -32,7 +32,7 @@ type CreateCaseBody = {
   caseManagerUserId?:
     unknown;
 
-  ipcmUserId?:
+  travelerProfileIds?:
     unknown;
 
   suggestedBudgetCents?:
@@ -74,6 +74,52 @@ function parseOptionalBudget(
   return value;
 }
 
+function parseTravelerProfileIds(
+  value: unknown
+): string[] {
+  if (
+    !Array.isArray(
+      value
+    )
+  ) {
+    throw new Error(
+      "INVALID_TRAVELERS"
+    );
+  }
+
+  const travelerProfileIds =
+    Array.from(
+      new Set(
+        value
+          .filter(
+            (
+              item
+            ): item is string =>
+              typeof item ===
+              "string"
+          )
+          .map(
+            (
+              item
+            ) =>
+              item.trim()
+          )
+          .filter(Boolean)
+      )
+    );
+
+  if (
+    travelerProfileIds.length ===
+    0
+  ) {
+    throw new Error(
+      "INVALID_TRAVELERS"
+    );
+  }
+
+  return travelerProfileIds;
+}
+
 function parseBody(
   event:
     APIGatewayProxyEvent
@@ -112,15 +158,6 @@ function parseBody(
           .trim()
       : "";
 
-  const ipcmUserId =
-    typeof body
-      .ipcmUserId ===
-      "string"
-      ? body
-          .ipcmUserId
-          .trim()
-      : "";
-
   const status =
     typeof body.status ===
       "string"
@@ -133,7 +170,6 @@ function parseBody(
     caseReferenceId.length >
       50 ||
     !caseManagerUserId ||
-    !ipcmUserId ||
     !status
   ) {
     throw new Error(
@@ -144,9 +180,14 @@ function parseBody(
   return {
     caseReferenceId,
 
-    caseManagerUserId,
+    ipcmUserId:
+      caseManagerUserId,
 
-    ipcmUserId,
+    travelerProfileIds:
+      parseTravelerProfileIds(
+        body
+          .travelerProfileIds
+      ),
 
     suggestedBudgetCents:
       parseOptionalBudget(
@@ -238,11 +279,24 @@ export async function handler(
         );
       }
 
+      if (
+        code ===
+        "INVALID_TRAVELERS"
+      ) {
+        return jsonResponse(
+          400,
+          {
+            message:
+              "At least one traveler must be assigned to the case."
+          }
+        );
+      }
+
       return jsonResponse(
         400,
         {
           message:
-            "Case reference, Case Manager, IPCM, and status are required."
+            "Case reference, Case Manager, travelers, and status are required."
         }
       );
     }
@@ -270,7 +324,7 @@ export async function handler(
       );
 
       emailWarning =
-        "The case was created, but the assignment email could not be sent.";
+        "The case was created, but the Case Manager assignment email could not be sent.";
     } else {
       try {
         await sendTransactionalEmail(
@@ -298,12 +352,12 @@ export async function handler(
         emailError
       ) {
         console.error(
-          "Unable to send case assignment email",
+          "Unable to send Case Manager assignment email",
           emailError
         );
 
         emailWarning =
-          "The case was created, but the IPCM assignment email could not be sent.";
+          "The case was created, but the Case Manager assignment email could not be sent.";
       }
     }
 
@@ -349,7 +403,9 @@ export async function handler(
 
       if (
         error.code ===
-        "INVALID_ASSIGNEE"
+        "INVALID_ASSIGNEE" ||
+        error.code ===
+        "INVALID_TRAVELER"
       ) {
         return jsonResponse(
           400,

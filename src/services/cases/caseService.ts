@@ -10,7 +10,24 @@ export type CaseAssignmentOption = {
   id: string;
 
   firstName: string;
+
   lastName: string;
+
+  email: string;
+};
+
+export type CaseTravelerOption = {
+  id: string;
+
+  legalFirstName:
+    string;
+
+  legalMiddleName:
+    | string
+    | null;
+
+  legalLastName:
+    string;
 
   email: string;
 };
@@ -19,19 +36,19 @@ export type CaseFormOptions = {
   caseManagers:
     CaseAssignmentOption[];
 
-  ipcms:
-    CaseAssignmentOption[];
+  travelers:
+    CaseTravelerOption[];
 };
 
 export type CaseMutationInput = {
   caseReferenceId:
     string;
 
-  caseManagerUserId:
-    string;
-
   ipcmUserId:
     string;
+
+  travelerProfileIds:
+    string[];
 
   suggestedBudgetCents:
     | number
@@ -66,8 +83,11 @@ export type CaseMutationResult = {
 type UserAssignmentRow = {
   id: string;
 
-  first_name: string;
-  last_name: string;
+  first_name:
+    string;
+
+  last_name:
+    string;
 
   email: string;
 };
@@ -114,7 +134,25 @@ function normalizeStatus(
     .toLowerCase();
 }
 
-async function getUserWithRole(
+function normalizeTravelerIds(
+  travelerProfileIds:
+    string[]
+): string[] {
+  return Array.from(
+    new Set(
+      travelerProfileIds
+        .map(
+          (
+            id
+          ) =>
+            id.trim()
+        )
+        .filter(Boolean)
+    )
+  );
+}
+
+async function getIpcmUser(
   client:
     PoolClient,
 
@@ -122,11 +160,7 @@ async function getUserWithRole(
     string,
 
   userId:
-    string,
-
-  roleName:
-    "case_manager" |
-    "ipcm"
+    string
 ): Promise<UserAssignmentRow> {
   const result =
     await client.query<
@@ -159,14 +193,13 @@ async function getUserWithRole(
         u.status = 'active'
 
         AND
-        r.name = $3
+        r.name = 'ipcm'
 
       LIMIT 1;
       `,
       [
         userId,
-        companyId,
-        roleName
+        companyId
       ]
     );
 
@@ -174,27 +207,144 @@ async function getUserWithRole(
     result.rows[0];
 
   if (!user) {
-    const label =
-      roleName ===
-      "ipcm"
-        ? "IPCM"
-        : "Case Manager";
-
     throw new CaseServiceError(
       "INVALID_ASSIGNEE",
-      `${label} is not an active user in this company.`
+      "Case Manager is not an active IPCM user in this company."
     );
   }
 
   return user;
 }
 
+async function validateTravelers(
+  client:
+    PoolClient,
+
+  companyId:
+    string,
+
+  travelerProfileIds:
+    string[]
+): Promise<string[]> {
+  const uniqueTravelerIds =
+    normalizeTravelerIds(
+      travelerProfileIds
+    );
+
+  if (
+    uniqueTravelerIds.length ===
+    0
+  ) {
+    throw new CaseServiceError(
+      "INVALID_TRAVELER",
+      "At least one traveler must be assigned to the case."
+    );
+  }
+
+  const result =
+    await client.query<{
+      id: string;
+    }>(
+      `
+      SELECT
+        id
+
+      FROM traveler_profiles
+
+      WHERE
+        company_id = $1
+
+        AND
+        status = 'active'
+
+        AND
+        id = ANY(
+          $2::uuid[]
+        );
+      `,
+      [
+        companyId,
+        uniqueTravelerIds
+      ]
+    );
+
+  if (
+    result.rows.length !==
+    uniqueTravelerIds.length
+  ) {
+    throw new CaseServiceError(
+      "INVALID_TRAVELER",
+      "One or more selected travelers are invalid, inactive, or belong to another company."
+    );
+  }
+
+  return uniqueTravelerIds;
+}
+
+async function replaceCaseTravelers(
+  client:
+    PoolClient,
+
+  caseId:
+    string,
+
+  travelerProfileIds:
+    string[]
+): Promise<void> {
+  await client.query(
+    `
+    DELETE FROM case_travelers
+
+    WHERE
+      case_id = $1;
+    `,
+    [
+      caseId
+    ]
+  );
+
+  if (
+    travelerProfileIds.length ===
+    0
+  ) {
+    return;
+  }
+
+  await client.query(
+    `
+    INSERT INTO case_travelers (
+      case_id,
+      traveler_profile_id
+    )
+
+    SELECT
+      $1,
+      traveler_profile_id
+
+    FROM UNNEST(
+      $2::uuid[]
+    )
+      AS traveler_profile_id;
+    `,
+    [
+      caseId,
+      travelerProfileIds
+    ]
+  );
+}
+
 export async function getCaseFormOptions(
   companyId: string
 ): Promise<CaseFormOptions> {
-  const result =
-    await getPool()
-      .query<{
+  const pool =
+    getPool();
+
+  const [
+    caseManagersResult,
+    travelersResult
+  ] =
+    await Promise.all([
+      pool.query<{
         id: string;
 
         first_name:
@@ -205,18 +355,13 @@ export async function getCaseFormOptions(
 
         email:
           string;
-
-        role_name:
-          string;
       }>(
         `
         SELECT DISTINCT
           u.id,
           u.first_name,
           u.last_name,
-          u.email,
-          r.name
-            AS role_name
+          u.email
 
         FROM users u
 
@@ -236,10 +381,8 @@ export async function getCaseFormOptions(
             'active'
 
           AND
-          r.name IN (
-            'case_manager',
+          r.name =
             'ipcm'
-          )
 
         ORDER BY
           u.last_name,
@@ -249,57 +392,102 @@ export async function getCaseFormOptions(
         [
           companyId
         ]
-      );
+      ),
 
-  const caseManagers:
-    CaseAssignmentOption[] =
-      [];
+      pool.query<{
+        id: string;
 
-  const ipcms:
-    CaseAssignmentOption[] =
-      [];
+        legal_first_name:
+          string;
 
-  for (
-    const row of
-    result.rows
-  ) {
-    const option:
-      CaseAssignmentOption = {
-        id:
-          row.id,
+        legal_middle_name:
+          string |
+          null;
 
-        firstName:
-          row.first_name,
-
-        lastName:
-          row.last_name,
+        legal_last_name:
+          string;
 
         email:
-          row.email
-      };
+          string;
+      }>(
+        `
+        SELECT
+          id,
+          legal_first_name,
+          legal_middle_name,
+          legal_last_name,
+          email
 
-    if (
-      row.role_name ===
-      "case_manager"
-    ) {
-      caseManagers.push(
-        option
-      );
-    }
+        FROM traveler_profiles
 
-    if (
-      row.role_name ===
-      "ipcm"
-    ) {
-      ipcms.push(
-        option
-      );
-    }
-  }
+        WHERE
+          company_id = $1
+
+          AND
+          status =
+            'active'
+
+        ORDER BY
+          legal_last_name,
+          legal_first_name,
+          email;
+        `,
+        [
+          companyId
+        ]
+      )
+    ]);
 
   return {
-    caseManagers,
-    ipcms
+    caseManagers:
+      caseManagersResult
+        .rows
+        .map(
+          (
+            row
+          ) => ({
+            id:
+              row.id,
+
+            firstName:
+              row
+                .first_name,
+
+            lastName:
+              row
+                .last_name,
+
+            email:
+              row.email
+          })
+        ),
+
+    travelers:
+      travelersResult
+        .rows
+        .map(
+          (
+            row
+          ) => ({
+            id:
+              row.id,
+
+            legalFirstName:
+              row
+                .legal_first_name,
+
+            legalMiddleName:
+              row
+                .legal_middle_name,
+
+            legalLastName:
+              row
+                .legal_last_name,
+
+            email:
+              row.email
+          })
+        )
   };
 }
 
@@ -319,20 +507,19 @@ export async function createCaseRecord(
       "BEGIN"
     );
 
-    await getUserWithRole(
-      client,
-      companyId,
-      input
-        .caseManagerUserId,
-      "case_manager"
-    );
-
     const ipcm =
-      await getUserWithRole(
+      await getIpcmUser(
         client,
         companyId,
-        input.ipcmUserId,
-        "ipcm"
+        input.ipcmUserId
+      );
+
+    const travelerProfileIds =
+      await validateTravelers(
+        client,
+        companyId,
+        input
+          .travelerProfileIds
       );
 
     const result =
@@ -345,7 +532,6 @@ export async function createCaseRecord(
         `
         INSERT INTO cases (
           case_reference_id,
-          case_manager_user_id,
           ipcm_user_id,
           status,
           company_id,
@@ -356,9 +542,9 @@ export async function createCaseRecord(
           $2,
           $3,
           $4,
-          $5,
-          $6
+          $5
         )
+
         RETURNING
           id,
           case_reference_id;
@@ -368,9 +554,6 @@ export async function createCaseRecord(
             input
               .caseReferenceId
           ),
-
-          input
-            .caseManagerUserId,
 
           input
             .ipcmUserId,
@@ -398,6 +581,12 @@ export async function createCaseRecord(
       );
     }
 
+    await replaceCaseTravelers(
+      client,
+      createdCase.id,
+      travelerProfileIds
+    );
+
     await client.query(
       "COMMIT"
     );
@@ -414,10 +603,12 @@ export async function createCaseRecord(
         ipcm.id,
 
       ipcmFirstName:
-        ipcm.first_name,
+        ipcm
+          .first_name,
 
       ipcmLastName:
-        ipcm.last_name,
+        ipcm
+          .last_name,
 
       ipcmEmail:
         ipcm.email,
@@ -506,20 +697,19 @@ export async function updateCaseRecord(
       );
     }
 
-    await getUserWithRole(
-      client,
-      companyId,
-      input
-        .caseManagerUserId,
-      "case_manager"
-    );
-
     const ipcm =
-      await getUserWithRole(
+      await getIpcmUser(
         client,
         companyId,
-        input.ipcmUserId,
-        "ipcm"
+        input.ipcmUserId
+      );
+
+    const travelerProfileIds =
+      await validateTravelers(
+        client,
+        companyId,
+        input
+          .travelerProfileIds
       );
 
     const ipcmChanged =
@@ -540,26 +730,23 @@ export async function updateCaseRecord(
           case_reference_id =
             $1,
 
-          case_manager_user_id =
+          ipcm_user_id =
             $2,
 
-          ipcm_user_id =
+          suggested_budget_cents =
             $3,
 
-          suggested_budget_cents =
-            $4,
-
           status =
-            $5,
+            $4,
 
           updated_at =
             CURRENT_TIMESTAMP
 
         WHERE
-          id = $6
+          id = $5
 
           AND
-          company_id = $7
+          company_id = $6
 
         RETURNING
           id,
@@ -570,9 +757,6 @@ export async function updateCaseRecord(
             input
               .caseReferenceId
           ),
-
-          input
-            .caseManagerUserId,
 
           input
             .ipcmUserId,
@@ -602,6 +786,12 @@ export async function updateCaseRecord(
       );
     }
 
+    await replaceCaseTravelers(
+      client,
+      caseId,
+      travelerProfileIds
+    );
+
     await client.query(
       "COMMIT"
     );
@@ -618,10 +808,12 @@ export async function updateCaseRecord(
         ipcm.id,
 
       ipcmFirstName:
-        ipcm.first_name,
+        ipcm
+          .first_name,
 
       ipcmLastName:
-        ipcm.last_name,
+        ipcm
+          .last_name,
 
       ipcmEmail:
         ipcm.email,

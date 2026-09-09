@@ -30,14 +30,11 @@ type CaseRow = {
   case_manager_last_name:
     string;
 
-  ipcm_user_id:
-    string;
+  traveler_profile_ids:
+    string[];
 
-  ipcm_first_name:
-    string;
-
-  ipcm_last_name:
-    string;
+  traveler_names:
+    string[];
 
   suggested_budget_cents:
     number |
@@ -96,22 +93,6 @@ export async function handler(
     } else if (
       currentUser
         .roleName ===
-      "case_manager"
-    ) {
-      whereClause =
-        `
-        c.case_manager_user_id = $1
-        AND c.company_id = $2
-        `;
-
-      params.push(
-        currentUser.id,
-        currentUser
-          .companyId
-      );
-    } else if (
-      currentUser
-        .roleName ===
       "ipcm"
     ) {
       whereClause =
@@ -146,21 +127,50 @@ export async function handler(
 
             c.case_reference_id,
 
-            c.case_manager_user_id,
-
-            cm.first_name
-              AS case_manager_first_name,
-
-            cm.last_name
-              AS case_manager_last_name,
-
-            c.ipcm_user_id,
+            c.ipcm_user_id
+              AS case_manager_user_id,
 
             ipcm.first_name
-              AS ipcm_first_name,
+              AS case_manager_first_name,
 
             ipcm.last_name
-              AS ipcm_last_name,
+              AS case_manager_last_name,
+
+            COALESCE(
+              ARRAY_AGG(
+                tp.id::text
+                ORDER BY
+                  tp.legal_last_name,
+                  tp.legal_first_name
+              )
+              FILTER (
+                WHERE
+                  tp.id IS NOT NULL
+              ),
+              ARRAY[]::text[]
+            )
+              AS traveler_profile_ids,
+
+            COALESCE(
+              ARRAY_AGG(
+                TRIM(
+                  CONCAT(
+                    tp.legal_first_name,
+                    ' ',
+                    tp.legal_last_name
+                  )
+                )
+                ORDER BY
+                  tp.legal_last_name,
+                  tp.legal_first_name
+              )
+              FILTER (
+                WHERE
+                  tp.id IS NOT NULL
+              ),
+              ARRAY[]::text[]
+            )
+              AS traveler_names,
 
             c.suggested_budget_cents,
 
@@ -170,16 +180,31 @@ export async function handler(
 
           FROM cases c
 
-          JOIN users cm
-            ON cm.id =
-              c.case_manager_user_id
-
           JOIN users ipcm
             ON ipcm.id =
               c.ipcm_user_id
 
+          LEFT JOIN case_travelers ct
+            ON ct.case_id =
+              c.id
+
+          LEFT JOIN traveler_profiles tp
+            ON tp.id =
+              ct.traveler_profile_id
+
           WHERE
             ${whereClause}
+
+          GROUP BY
+            c.id,
+            c.case_reference_id,
+            c.ipcm_user_id,
+            ipcm.first_name,
+            ipcm.last_name,
+            c.suggested_budget_cents,
+            c.approved_budget_cents,
+            c.status,
+            c.created_at
 
           ORDER BY
             c.created_at DESC;
@@ -210,13 +235,13 @@ export async function handler(
                 `${row.case_manager_first_name} ${row.case_manager_last_name}`
                   .trim(),
 
-              ipcmUserId:
+              travelerProfileIds:
                 row
-                  .ipcm_user_id,
+                  .traveler_profile_ids,
 
-              ipcmName:
-                `${row.ipcm_first_name} ${row.ipcm_last_name}`
-                  .trim(),
+              travelerNames:
+                row
+                  .traveler_names,
 
               suggestedBudgetCents:
                 row
