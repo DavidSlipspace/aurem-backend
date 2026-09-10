@@ -74,6 +74,7 @@ function decodePayload(
 async function invokeProvider(
   functionName:
     string,
+
   payload:
     unknown
 ): Promise<unknown> {
@@ -151,13 +152,13 @@ export async function handler(
 
     if (
       currentUser.roleName !==
-      "ipcm"
+        "ipcm"
     ) {
       return jsonResponse(
         403,
         {
           message:
-            "Only IPCM users can configure payment methods."
+            "Only Case Manager users can configure payment methods."
         }
       );
     }
@@ -195,7 +196,8 @@ export async function handler(
             last_name,
             email
 
-          FROM users
+          FROM
+            users
 
           WHERE
             id = $1
@@ -252,7 +254,7 @@ export async function handler(
         404,
         {
           message:
-            "Unable to locate the IPCM account."
+            "Unable to locate the Case Manager account."
         }
       );
     }
@@ -265,7 +267,7 @@ export async function handler(
     if (
       !customerId
     ) {
-      const response =
+      const providerResponse =
         await invokeProvider(
           providerFunctionName,
           {
@@ -286,7 +288,8 @@ export async function handler(
           CreateCustomerResponse;
 
       customerId =
-        response.customerId;
+        providerResponse
+          .customerId;
 
       if (
         !customerId
@@ -296,46 +299,54 @@ export async function handler(
         );
       }
 
-      await pool.query(
-        `
-        INSERT INTO
-          ipcm_payment_provider_customers (
-            user_id,
-            company_id,
-            provider,
-            provider_customer_id
+      const insertResult =
+        await pool.query<
+          ProviderCustomerRow
+        >(
+          `
+          INSERT INTO
+            ipcm_payment_provider_customers (
+              user_id,
+              company_id,
+              provider,
+              provider_customer_id
+            )
+
+          VALUES (
+            $1,
+            $2,
+            'stripe',
+            $3
           )
 
-        VALUES (
-          $1,
-          $2,
-          'stripe',
-          $3
-        )
+          ON CONFLICT (
+            user_id,
+            provider
+          )
 
-        ON CONFLICT (
-          user_id,
-          provider
-        )
+          DO UPDATE
 
-        DO UPDATE
+          SET
+            company_id =
+              EXCLUDED.company_id,
 
-        SET
-          company_id =
-            EXCLUDED.company_id,
+            updated_at =
+              CURRENT_TIMESTAMP
 
-          provider_customer_id =
-            EXCLUDED.provider_customer_id,
+          RETURNING
+            provider_customer_id;
+          `,
+          [
+            currentUser.id,
+            currentUser.companyId,
+            customerId
+          ]
+        );
 
-          updated_at =
-            CURRENT_TIMESTAMP;
-        `,
-        [
-          currentUser.id,
-          currentUser.companyId,
-          customerId
-        ]
-      );
+      customerId =
+        insertResult
+          .rows[0]
+          .provider_customer_id;
     }
 
     const setupResponse =

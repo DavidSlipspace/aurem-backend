@@ -66,7 +66,8 @@ function isNonEmptyString(
   return (
     typeof value ===
       "string" &&
-    value.trim()
+    value
+      .trim()
       .length >
       0
   );
@@ -138,6 +139,46 @@ function isRequest(
   return false;
 }
 
+function extractStripeSecret(
+  secretString:
+    string
+): string {
+  const normalized =
+    secretString
+      .trim();
+
+  if (
+    !normalized.startsWith(
+      "{"
+    )
+  ) {
+    return normalized;
+  }
+
+  try {
+    const parsed =
+      JSON.parse(
+        normalized
+      ) as {
+        STRIPE_SECRET_KEY?:
+          string;
+
+        stripeSecretKey?:
+          string;
+      };
+
+    return (
+      parsed
+        .STRIPE_SECRET_KEY ||
+      parsed
+        .stripeSecretKey ||
+      ""
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
 async function getStripe():
   Promise<Stripe> {
   if (
@@ -167,15 +208,17 @@ async function getStripe():
     );
 
   const secretKey =
-    secretResponse
-      .SecretString
-      ?.trim();
+    extractStripeSecret(
+      secretResponse
+        .SecretString ||
+      ""
+    );
 
   if (
     !secretKey
   ) {
     throw new Error(
-      "The Stripe secret does not contain a secret string."
+      "The configured Stripe secret does not contain a Stripe secret key."
     );
   }
 
@@ -232,18 +275,24 @@ export async function handler(
     const customer =
       await stripe
         .customers
-        .create({
-          email:
-            event.email,
+        .create(
+          {
+            email:
+              event.email,
 
-          name:
-            event.name,
+            name:
+              event.name,
 
-          metadata: {
-            aurem_user_id:
-              event.auremUserId
+            metadata: {
+              aurem_user_id:
+                event.auremUserId
+            }
+          },
+          {
+            idempotencyKey:
+              `aurem-ipcm-${event.auremUserId}`
           }
-        });
+        );
 
     return {
       customerId:
@@ -337,6 +386,11 @@ export async function handler(
           ?.id ??
         null,
 
+      paymentMethodType:
+        paymentMethod
+          ?.type ??
+        null,
+
       bankName:
         bankAccount
           ?.bank_name ??
@@ -350,6 +404,12 @@ export async function handler(
       bankAccountType:
         bankAccount
           ?.account_type ??
+        null,
+
+      nextActionType:
+        setupIntent
+          .next_action
+          ?.type ??
         null
     };
   }

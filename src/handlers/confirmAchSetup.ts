@@ -36,9 +36,15 @@ type ExistingPaymentMethodRow = {
 
   provider_payment_method_id:
     string;
+
+  status:
+    string;
 };
 
 type StripeSetupIntentResponse = {
+  setupIntentId?:
+    string;
+
   status?:
     string;
 
@@ -47,6 +53,10 @@ type StripeSetupIntentResponse = {
     | null;
 
   paymentMethodId?:
+    | string
+    | null;
+
+  paymentMethodType?:
     | string
     | null;
 
@@ -59,6 +69,10 @@ type StripeSetupIntentResponse = {
     | null;
 
   bankAccountType?:
+    | string
+    | null;
+
+  nextActionType?:
     | string
     | null;
 };
@@ -88,6 +102,7 @@ function decodePayload(
 async function invokeProvider(
   functionName:
     string,
+
   payload:
     unknown
 ): Promise<unknown> {
@@ -109,7 +124,7 @@ async function invokeProvider(
       })
     );
 
-  const text =
+  const responseText =
     decodePayload(
       response.Payload
     );
@@ -119,7 +134,13 @@ async function invokeProvider(
   ) {
     console.error(
       "Stripe provider returned an error",
-      text
+      {
+        functionError:
+          response.FunctionError,
+
+        payload:
+          responseText
+      }
     );
 
     throw new Error(
@@ -128,33 +149,81 @@ async function invokeProvider(
   }
 
   return JSON.parse(
-    text ||
+    responseText ||
       "{}"
   ) as unknown;
 }
 
 function mapStatus(
-  status:
+  stripeStatus:
     string
 ):
   | "active"
   | "requires_action"
   | "pending" {
   if (
-    status ===
+    stripeStatus ===
       "succeeded"
   ) {
     return "active";
   }
 
   if (
-    status ===
+    stripeStatus ===
       "requires_action"
   ) {
     return "requires_action";
   }
 
   return "pending";
+}
+
+function buildDisplayName(
+  bankName:
+    string |
+    null,
+
+  lastFour:
+    string |
+    null
+): string {
+  const label =
+    bankName ||
+    "Bank account";
+
+  return lastFour
+    ? `${label} ending in ${lastFour}`
+    : label;
+}
+
+async function detachOldStripeMethod(
+  providerFunctionName:
+    string,
+
+  paymentMethodId:
+    string
+): Promise<void> {
+  try {
+    await invokeProvider(
+      providerFunctionName,
+      {
+        action:
+          "detach_payment_method",
+
+        paymentMethodId
+      }
+    );
+  } catch (
+    error
+  ) {
+    console.error(
+      "Unable to detach replaced Stripe bank account",
+      {
+        paymentMethodId,
+        error
+      }
+    );
+  }
 }
 
 export async function handler(
@@ -170,7 +239,18 @@ export async function handler(
       );
 
     if (
-      !currentUser ||
+      !currentUser
+    ) {
+      return jsonResponse(
+        403,
+        {
+          message:
+            "Authenticated user does not exist in the Aurem database."
+        }
+      );
+    }
+
+    if (
       currentUser.roleName !==
         "ipcm"
     ) {
@@ -178,27 +258,42 @@ export async function handler(
         403,
         {
           message:
-            "Only IPCM users can manage their payment profile."
+            "Only Case Manager users can manage their payment profile."
         }
       );
     }
 
-    const body =
-      JSON.parse(
-        event.body ??
-          "{}"
-      ) as
-        ConfirmAchBody;
+    let body:
+      ConfirmAchBody;
+
+    try {
+      body =
+        JSON.parse(
+          event.body ??
+            "{}"
+        ) as
+          ConfirmAchBody;
+    } catch {
+      return jsonResponse(
+        400,
+        {
+          message:
+            "Invalid request body."
+        }
+      );
+    }
 
     const setupIntentId =
       typeof body
         .setupIntentId ===
         "string"
-        ? body.setupIntentId
+        ? body
+            .setupIntentId
             .trim()
         : "";
 
     if (
+      !setupIntentId ||
       !setupIntentId
         .startsWith(
           "seti_"
@@ -220,41 +315,76 @@ export async function handler(
     if (
       !providerFunctionName
     ) {
-      throw new Error(
-        "Stripe payment provider is not configured."
+      return jsonResponse(
+        500,
+        {
+          message:
+            "Secure bank account setup is not configured."
+        }
       );
     }
 
     const pool =
       getPool();
 
-    const customerResult =
-      await pool.query<
-        ProviderCustomerRow
-      >(
-        `
-        SELECT
-          provider_customer_id
+    const [
+      customerResult,
+      existingResult
+    ] =
+      await Promise.all([
+        pool.query<
+          ProviderCustomerRow
+        >(
+          `
+          SELECT
+            provider_customer_id
 
-        FROM
-          ipcm_payment_provider_customers
+          FROM
+            ipcm_payment_provider_customers
 
-        WHERE
-          user_id = $1
+          WHERE
+            user_id = $1
 
-          AND
-          company_id = $2
+            AND
+            company_id = $2
 
-          AND
-          provider = 'stripe'
+            AND
+            provider = 'stripe'
 
-        LIMIT 1;
-        `,
-        [
-          currentUser.id,
-          currentUser.companyId
-        ]
-      );
+          LIMIT 1;
+          `,
+          [
+            currentUser.id,
+            currentUser.companyId
+          ]
+        ),
+
+        pool.query<
+          ExistingPaymentMethodRow
+        >(
+          `
+          SELECT
+            provider,
+            provider_payment_method_id,
+            status
+
+          FROM
+            ipcm_payment_methods
+
+          WHERE
+            user_id = $1
+
+            AND
+            payment_method_type =
+              'bank_account'
+
+          LIMIT 1;
+          `,
+          [
+            currentUser.id
+          ]
+        )
+      ]);
 
     const expectedCustomerId =
       customerResult
@@ -268,12 +398,12 @@ export async function handler(
         409,
         {
           message:
-            "No Stripe customer exists for this IPCM."
+            "No Stripe customer mapping exists for this Case Manager."
         }
       );
     }
 
-    const providerResponse =
+    const stripeResponse =
       await invokeProvider(
         providerFunctionName,
         {
@@ -286,21 +416,60 @@ export async function handler(
         StripeSetupIntentResponse;
 
     if (
-      providerResponse
+      !stripeResponse
+        .customerId ||
+      stripeResponse
         .customerId !==
-      expectedCustomerId
+        expectedCustomerId
     ) {
       return jsonResponse(
         403,
         {
           message:
-            "This bank account setup session does not belong to the authenticated IPCM."
+            "This bank account setup session does not belong to the authenticated Case Manager."
+        }
+      );
+    }
+
+    if (
+      stripeResponse
+        .paymentMethodType !==
+        "us_bank_account"
+    ) {
+      return jsonResponse(
+        400,
+        {
+          message:
+            "The Stripe payment method is not a US bank account."
+        }
+      );
+    }
+
+    const stripeStatus =
+      stripeResponse
+        .status ||
+      "";
+
+    if (
+      ![
+        "succeeded",
+        "requires_action",
+        "processing"
+      ].includes(
+        stripeStatus
+      )
+    ) {
+      return jsonResponse(
+        400,
+        {
+          message:
+            "The bank account setup has not been successfully authorized."
         }
       );
     }
 
     const paymentMethodId =
-      providerResponse
+      stripeResponse
         .paymentMethodId;
 
     if (
@@ -314,64 +483,45 @@ export async function handler(
         400,
         {
           message:
-            "Stripe has not returned a reusable bank payment method."
+            "Stripe has not returned a reusable bank payment method yet."
         }
       );
     }
 
     const status =
       mapStatus(
-        providerResponse
-          .status ??
-        ""
-      );
-
-    const oldResult =
-      await pool.query<
-        ExistingPaymentMethodRow
-      >(
-        `
-        SELECT
-          provider,
-          provider_payment_method_id
-
-        FROM
-          ipcm_payment_methods
-
-        WHERE
-          user_id = $1
-
-          AND
-          payment_method_type =
-            'bank_account'
-
-        LIMIT 1;
-        `,
-        [
-          currentUser.id
-        ]
+        stripeStatus
       );
 
     const bankName =
-      providerResponse
+      stripeResponse
         .bankName ??
       null;
 
     const lastFour =
-      providerResponse
+      stripeResponse
         .lastFour ??
       null;
 
-    const accountType =
-      providerResponse
+    const bankAccountType =
+      stripeResponse
         .bankAccountType ??
       null;
 
-    const displayName =
-      lastFour
-        ? `${bankName || "Bank account"} ending in ${lastFour}`
-        : bankName ||
-          "Bank account";
+    if (
+      lastFour &&
+      !/^\d{4}$/.test(
+        lastFour
+      )
+    ) {
+      throw new Error(
+        "Stripe returned invalid masked bank account digits."
+      );
+    }
+
+    const existingMethod =
+      existingResult
+        .rows[0];
 
     await pool.query(
       `
@@ -451,45 +601,44 @@ export async function handler(
         currentUser.id,
         currentUser.companyId,
         paymentMethodId,
-        displayName,
+        buildDisplayName(
+          bankName,
+          lastFour
+        ),
         lastFour,
         bankName,
-        accountType,
+        bankAccountType,
         status
       ]
     );
 
-    const oldMethod =
-      oldResult.rows[0];
-
+    /*
+     * Only detach the previous
+     * account after the new bank
+     * account is fully active.
+     *
+     * If Stripe requires
+     * microdeposit verification,
+     * retaining the old Stripe
+     * account gives us a safer
+     * migration path when webhook
+     * handling is added later.
+     */
     if (
-      oldMethod
+      status ===
+        "active" &&
+      existingMethod
         ?.provider ===
         "stripe" &&
-      oldMethod
+      existingMethod
         .provider_payment_method_id !==
         paymentMethodId
     ) {
-      try {
-        await invokeProvider(
-          providerFunctionName,
-          {
-            action:
-              "detach_payment_method",
-
-            paymentMethodId:
-              oldMethod
-                .provider_payment_method_id
-          }
-        );
-      } catch (
-        cleanupError
-      ) {
-        console.error(
-          "Unable to detach replaced Stripe payment method",
-          cleanupError
-        );
-      }
+      await detachOldStripeMethod(
+        providerFunctionName,
+        existingMethod
+          .provider_payment_method_id
+      );
     }
 
     const message =
@@ -498,7 +647,7 @@ export async function handler(
         ? "Bank account connected successfully."
         : status ===
             "requires_action"
-          ? "Bank account saved. Stripe requires additional verification before it can be used."
+          ? "Bank account saved. Stripe requires an additional verification step before it can be used."
           : "Bank account saved and is pending verification.";
 
     return jsonResponse(
@@ -519,8 +668,7 @@ export async function handler(
 
           lastFour,
 
-          bankAccountType:
-            accountType
+          bankAccountType
         }
       }
     );
@@ -536,7 +684,9 @@ export async function handler(
       500,
       {
         message:
-          "Unable to save the bank account."
+          error instanceof Error
+            ? error.message
+            : "Unable to save the bank account."
       }
     );
   }

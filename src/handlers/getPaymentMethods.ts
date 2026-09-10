@@ -12,6 +12,7 @@ import {
 } from "../common/response";
 
 import {
+  getCompanyIpcmPaymentProfiles,
   getSelfIpcmPaymentProfile
 } from "../services/payments/paymentMethodService";
 
@@ -40,14 +41,35 @@ export async function handler(
     }
 
     if (
+      currentUser.roleName ===
+        "admin"
+    ) {
+      const profiles =
+        await getCompanyIpcmPaymentProfiles(
+          currentUser.companyId
+        );
+
+      return jsonResponse(
+        200,
+        {
+          mode:
+            "admin",
+
+          ipcms:
+            profiles
+        }
+      );
+    }
+
+    if (
       currentUser.roleName !==
-      "ipcm"
+        "ipcm"
     ) {
       return jsonResponse(
         403,
         {
           message:
-            "Only IPCM users can access payment profiles."
+            "Only Admin and Case Manager users can access payment profiles."
         }
       );
     }
@@ -65,7 +87,7 @@ export async function handler(
         404,
         {
           message:
-            "Your IPCM payment profile could not be found."
+            "Your Case Manager payment profile could not be found."
         }
       );
     }
