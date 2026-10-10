@@ -182,19 +182,6 @@ Resources:
       SecurityGroupIds:
         - !Ref VpcEndpointSecurityGroup
 
-  Ec2MessagesVpcEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcEndpointType: Interface
-      VpcId: !Ref VpcId
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref SubnetIdA
-        - !Ref SubnetIdB
-      SecurityGroupIds:
-        - !Ref VpcEndpointSecurityGroup
-
   DatabaseSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -280,7 +267,6 @@ Resources:
     DependsOn:
       - SsmVpcEndpoint
       - SsmMessagesVpcEndpoint
-      - Ec2MessagesVpcEndpoint
     Properties:
       InstanceType: t3.micro
       ImageId: ami-0c02fb55956c7d316
