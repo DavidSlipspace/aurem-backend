@@ -37,7 +37,7 @@ export async function getIpcmRemovalCandidate(
               FROM cases c
 
               WHERE
-                c.ipcm_user_id =
+                c.case_manager_user_id =
                   u.id
             ) AS case_count,
 
@@ -48,7 +48,7 @@ export async function getIpcmRemovalCandidate(
               FROM trips t
 
               WHERE
-                t.ipcm_user_id =
+                t.case_manager_user_id =
                   u.id
             ) AS trip_count
 

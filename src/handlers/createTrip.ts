@@ -293,7 +293,7 @@ export async function handler(
           trip_reference_id,
           case_id,
           traveler_profile_id,
-          ipcm_user_id,
+          case_manager_user_id,
           trip_purpose,
           status,
           outbound_date,

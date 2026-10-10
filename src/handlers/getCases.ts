@@ -97,7 +97,7 @@ export async function handler(
     ) {
       whereClause =
         `
-        c.ipcm_user_id = $1
+        c.case_manager_user_id = $1
         AND c.company_id = $2
         `;
 
@@ -127,7 +127,7 @@ export async function handler(
 
             c.case_reference_id,
 
-            c.ipcm_user_id
+            c.case_manager_user_id
               AS case_manager_user_id,
 
             ipcm.first_name
@@ -182,7 +182,7 @@ export async function handler(
 
           JOIN users ipcm
             ON ipcm.id =
-              c.ipcm_user_id
+              c.case_manager_user_id
 
           LEFT JOIN case_travelers ct
             ON ct.case_id =
@@ -198,7 +198,7 @@ export async function handler(
           GROUP BY
             c.id,
             c.case_reference_id,
-            c.ipcm_user_id,
+            c.case_manager_user_id,
             ipcm.first_name,
             ipcm.last_name,
             c.suggested_budget_cents,

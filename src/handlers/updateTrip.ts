@@ -365,7 +365,7 @@ export async function handler(
 
           traveler_profile_id = $2,
 
-          ipcm_user_id = $3,
+          case_manager_user_id = $3,
 
           trip_purpose = $4,
 
@@ -405,7 +405,7 @@ export async function handler(
 
         RETURNING
           id,
-          ipcm_user_id;
+          case_manager_user_id;
         `,
         [
           body.caseId,
@@ -472,7 +472,7 @@ export async function handler(
 
         ipcmUserId:
           result.rows[0]
-            .ipcm_user_id,
+            .case_manager_user_id,
 
         message:
           "Trip updated."

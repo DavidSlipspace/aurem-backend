@@ -649,7 +649,7 @@ export async function handler(
       );
     } else {
       accessClause =
-        "c.ipcm_user_id = $2";
+        "c.case_manager_user_id = $2";
 
       params.push(
         currentUser.id

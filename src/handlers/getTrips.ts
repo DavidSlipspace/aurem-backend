@@ -38,7 +38,7 @@ type TripRow = {
   traveler_email:
     string;
 
-  ipcm_user_id:
+  case_manager_user_id:
     string;
 
   ipcm_first_name:
@@ -229,7 +229,7 @@ export async function handler(
       "ipcm"
     ) {
       whereClause =
-        "t.ipcm_user_id = $1";
+        "t.case_manager_user_id = $1";
 
       params.push(
         currentUser.id
@@ -269,7 +269,7 @@ export async function handler(
             tp.email
               AS traveler_email,
 
-            t.ipcm_user_id,
+            t.case_manager_user_id,
 
             ipcm.first_name
               AS ipcm_first_name,
@@ -391,7 +391,7 @@ export async function handler(
 
           JOIN users ipcm
             ON ipcm.id =
-              t.ipcm_user_id
+              t.case_manager_user_id
 
           LEFT JOIN trip_flights
             outbound_flight
@@ -457,7 +457,7 @@ export async function handler(
                 row.traveler_email,
 
               ipcmUserId:
-                row.ipcm_user_id,
+                row.case_manager_user_id,
 
               ipcmName:
                 `${row.ipcm_first_name} ${row.ipcm_last_name}`.trim(),

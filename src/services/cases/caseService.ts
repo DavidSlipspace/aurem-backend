@@ -95,7 +95,7 @@ type UserAssignmentRow = {
 type ExistingCaseRow = {
   id: string;
 
-  ipcm_user_id:
+  case_manager_user_id:
     string;
 };
 
@@ -532,7 +532,7 @@ export async function createCaseRecord(
         `
         INSERT INTO cases (
           case_reference_id,
-          ipcm_user_id,
+          case_manager_user_id,
           status,
           company_id,
           suggested_budget_cents
@@ -668,7 +668,7 @@ export async function updateCaseRecord(
         `
         SELECT
           id,
-          ipcm_user_id
+          case_manager_user_id
 
         FROM cases
 
@@ -713,7 +713,7 @@ export async function updateCaseRecord(
       );
 
     const ipcmChanged =
-      existing.ipcm_user_id !==
+      existing.case_manager_user_id !==
       input.ipcmUserId;
 
     const result =
@@ -730,7 +730,7 @@ export async function updateCaseRecord(
           case_reference_id =
             $1,
 
-          ipcm_user_id =
+          case_manager_user_id =
             $2,
 
           suggested_budget_cents =
@@ -874,7 +874,7 @@ export async function updateAssignedIpcmBudget(
           company_id = $3
 
           AND
-          ipcm_user_id = $4
+          case_manager_user_id = $4
 
         RETURNING id;
         `,
