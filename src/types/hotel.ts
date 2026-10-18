@@ -67,7 +67,7 @@ export type HotelProviderResult = {
 
 export type SearchTripHotelsResult = {
   tripReferenceId: string;
-  gcName: string;
+  travelerName: string;
 
   destination: string;
   checkInDate: string;

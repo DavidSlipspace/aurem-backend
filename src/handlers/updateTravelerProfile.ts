@@ -3,7 +3,7 @@ import { getPool } from "../db/pool";
 import { jsonResponse } from "../common/response";
 import { assertAdminOrCaseManager, getCurrentUser } from "../common/currentUser";
 
-type UpdateGcProfileRequest = {
+type UpdateTravelerProfileRequest = {
   legalFirstName: string;
   legalMiddleName?: string;
   legalLastName: string;
@@ -33,13 +33,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return jsonResponse(403, { message: "User role is not authorized to update GC profiles." });
     }
 
-    const gcProfileId = event.pathParameters?.id;
+    const travelerProfileId = event.pathParameters?.id;
 
-    if (!gcProfileId) {
+    if (!travelerProfileId) {
       return jsonResponse(400, { message: "Missing GC profile ID." });
     }
 
-    const body = JSON.parse(event.body ?? "{}") as UpdateGcProfileRequest;
+    const body = JSON.parse(event.body ?? "{}") as UpdateTravelerProfileRequest;
 
     if (!body.legalFirstName || !body.legalLastName || !body.dateOfBirth || !body.email || !body.phone) {
       return jsonResponse(400, { message: "Missing required fields." });
@@ -49,7 +49,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const result = await pool.query(
       `
-      UPDATE gc_profiles
+      UPDATE traveler_profiles
       SET
         legal_first_name = $1,
         legal_middle_name = $2,
@@ -83,7 +83,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         body.hotelRewardsNumber ?? null,
         body.seatPreference ?? null,
         body.status ?? null,
-        gcProfileId,
+        travelerProfileId,
         currentUser.companyId
       ]
     );
@@ -97,7 +97,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       message: "GC profile updated."
     });
   } catch (error) {
-    console.error("PUT /gc-profiles/{id} error", error);
+    console.error("PUT /traveler-profiles/{id} error", error);
     return jsonResponse(500, { message: "Unable to update GC profile." });
   }
 }

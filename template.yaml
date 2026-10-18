@@ -4,7 +4,8 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   Aurem backend - private RDS, Cognito, API Gateway, Lambda functions,
   SSM admin tunnel, private Lambda invocation, Amazon SES email delivery,
-  and travel inventory search through Duffel and Mapbox.
+  travel inventory search through Duffel and Mapbox, and secure payment
+  method configuration through Duffel and Stripe.
 
 Parameters:
   VpcId:
@@ -49,8 +50,8 @@ Parameters:
 
   FrontendBaseUrl:
     Type: String
-    Default: http://localhost:5173
-    Description: Base URL used to create secure GC booking links.
+    Default: https://app.orvotravel.com
+    Description: Base URL used to create secure Aurem frontend links.
 
   DuffelAccessToken:
     Type: String
@@ -63,6 +64,12 @@ Parameters:
     NoEcho: true
     MinLength: 10
     Description: Mapbox access token used to geocode trip destinations.
+
+  StripeSecretArn:
+    Type: String
+    Description: >
+      ARN of the AWS Secrets Manager secret containing the Stripe
+      secret API key.
 
 Resources:
   ApplicationSecurityGroup:
@@ -139,6 +146,18 @@ Resources:
       SecurityGroupIds:
         - !Ref VpcEndpointSecurityGroup
 
+  CognitoIdpVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.cognito-idp
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetIdB
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
   SsmVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -148,7 +167,6 @@ Resources:
       PrivateDnsEnabled: true
       SubnetIds:
         - !Ref SubnetIdA
-        - !Ref SubnetIdB
       SecurityGroupIds:
         - !Ref VpcEndpointSecurityGroup
 
@@ -161,20 +179,6 @@ Resources:
       PrivateDnsEnabled: true
       SubnetIds:
         - !Ref SubnetIdA
-        - !Ref SubnetIdB
-      SecurityGroupIds:
-        - !Ref VpcEndpointSecurityGroup
-
-  Ec2MessagesVpcEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcEndpointType: Interface
-      VpcId: !Ref VpcId
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref SubnetIdA
-        - !Ref SubnetIdB
       SecurityGroupIds:
         - !Ref VpcEndpointSecurityGroup
 
@@ -263,7 +267,6 @@ Resources:
     DependsOn:
       - SsmVpcEndpoint
       - SsmMessagesVpcEndpoint
-      - Ec2MessagesVpcEndpoint
     Properties:
       InstanceType: t3.micro
       ImageId: ami-0c02fb55956c7d316
@@ -281,19 +284,61 @@ Resources:
         - Key: Component
           Value: AdminTunnel
 
+  CognitoCustomMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-cognito-custom-message
+      CodeUri: .
+      Handler: customCognitoMessage.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
+      Policies:
+        - AWSLambdaBasicExecutionRole
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/customCognitoMessage.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+
+  CognitoCustomMessagePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CognitoCustomMessageFunction
+      Principal: cognito-idp.amazonaws.com
+
   UserPool:
     Type: AWS::Cognito::UserPool
+    DependsOn:
+      - CognitoCustomMessagePermission
     Properties:
       UserPoolName: aurem-dev-user-pool
       UsernameAttributes:
         - email
       AutoVerifiedAttributes:
         - email
+
+      EmailConfiguration:
+        EmailSendingAccount: DEVELOPER
+        SourceArn: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSourceEmail}
+        From: !Ref SesSourceEmail
+
+      LambdaConfig:
+        CustomMessage: !GetAtt CognitoCustomMessageFunction.Arn
+
       Schema:
         - Name: email
           AttributeDataType: String
           Required: true
           Mutable: true
+
         - Name: name
           AttributeDataType: String
           Required: true
@@ -317,9 +362,9 @@ Resources:
       Name: aurem-dev-api
       StageName: dev
       Cors:
-        AllowMethods: "'GET,POST,PUT,OPTIONS'"
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         AllowHeaders: "'Authorization,Content-Type'"
-        AllowOrigin: "'http://localhost:5173'"
+        AllowOrigin: "'https://app.orvotravel.com'"
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
         AddDefaultAuthorizerToCorsPreflight: false
@@ -333,9 +378,9 @@ Resources:
       RestApiId: !Ref AuremApi
       ResponseType: DEFAULT_4XX
       ResponseParameters:
-        gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
+        gatewayresponse.header.Access-Control-Allow-Origin: "'https://app.orvotravel.com'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
-        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
 
   ApiGatewayDefault5xxResponse:
     Type: AWS::ApiGateway::GatewayResponse
@@ -343,9 +388,9 @@ Resources:
       RestApiId: !Ref AuremApi
       ResponseType: DEFAULT_5XX
       ResponseParameters:
-        gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
+        gatewayresponse.header.Access-Control-Allow-Origin: "'https://app.orvotravel.com'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
-        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
 
   GetUserFunction:
     Type: AWS::Serverless::Function
@@ -431,12 +476,12 @@ Resources:
         External:
           - pg-native
 
-  GetGcProfilesFunction:
+  GetCaseOptionsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: aurem-dev-get-gc-profiles
+      FunctionName: aurem-dev-get-case-options
       CodeUri: .
-      Handler: getGcProfiles.handler
+      Handler: getCaseOptions.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
@@ -456,31 +501,33 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
       Events:
-        GetGcProfiles:
+        GetCaseOptions:
           Type: Api
           Properties:
             RestApiId: !Ref AuremApi
-            Path: /gc-profiles
+            Path: /cases/options
             Method: GET
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints:
-          - src/handlers/getGcProfiles.ts
+          - src/handlers/getCaseOptions.ts
         Minify: false
         Target: es2022
         Sourcemap: true
         External:
           - pg-native
 
-  CreateGcProfileFunction:
+  CreateCaseFunction:
     Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
     Properties:
-      FunctionName: aurem-dev-create-gc-profile
+      FunctionName: aurem-dev-create-case
       CodeUri: .
-      Handler: createGcProfile.handler
+      Handler: createCase.handler
       Runtime: nodejs22.x
-      Timeout: 10
+      Timeout: 15
       MemorySize: 256
       VpcConfig:
         SecurityGroupIds:
@@ -495,32 +542,92 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+          EMAIL_SERVICE_FUNCTION_NAME: !Ref EmailServiceFunction
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
       Policies:
         - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeEmailServiceForCaseAssignment
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt EmailServiceFunction.Arn
       Events:
-        CreateGcProfile:
+        CreateCase:
           Type: Api
           Properties:
             RestApiId: !Ref AuremApi
-            Path: /gc-profiles
+            Path: /cases
             Method: POST
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints:
-          - src/handlers/createGcProfile.ts
+          - src/handlers/createCase.ts
         Minify: false
         Target: es2022
         Sourcemap: true
         External:
           - pg-native
 
-  UpdateGcProfileFunction:
+  UpdateCaseFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-update-case
+      CodeUri: .
+      Handler: updateCase.handler
+      Runtime: nodejs22.x
+      Timeout: 15
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          EMAIL_SERVICE_FUNCTION_NAME: !Ref EmailServiceFunction
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeEmailServiceForCaseReassignment
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt EmailServiceFunction.Arn
+      Events:
+        UpdateCase:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /cases/{id}
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/updateCase.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  UpdateCaseBudgetFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: aurem-dev-update-gc-profile
+      FunctionName: aurem-dev-update-case-budget
       CodeUri: .
-      Handler: updateGcProfile.handler
+      Handler: updateCaseBudget.handler
       Runtime: nodejs22.x
       Timeout: 10
       MemorySize: 256
@@ -540,17 +647,540 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
       Events:
-        UpdateGcProfile:
+        UpdateCaseBudget:
           Type: Api
           Properties:
             RestApiId: !Ref AuremApi
-            Path: /gc-profiles/{id}
+            Path: /cases/{id}/budget
             Method: PUT
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints:
-          - src/handlers/updateGcProfile.ts
+          - src/handlers/updateCaseBudget.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  GetTravelerProfilesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-get-traveler-profiles
+      CodeUri: .
+      Handler: getTravelerProfiles.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        GetTravelerProfiles:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /traveler-profiles
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/getTravelerProfiles.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  UpdateMyProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-update-my-profile
+      CodeUri: .
+      Handler: updateMyProfile.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        UpdateMyProfileApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /me/profile
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/updateMyProfile.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  PaymentProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-payment-provider
+      CodeUri: .
+      Handler: paymentProvider.handler
+      Runtime: nodejs22.x
+      Timeout: 25
+      MemorySize: 256
+      Environment:
+        Variables:
+          DUFFEL_ACCESS_TOKEN: !Ref DuffelAccessToken
+      Policies:
+        - AWSLambdaBasicExecutionRole
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/paymentProvider.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+
+  UpsertPaymentMethodFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-upsert-payment-method
+      CodeUri: .
+      Handler: upsertPaymentMethod.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          PAYMENT_PROVIDER_FUNCTION_NAME: !Ref PaymentProviderFunction
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeDuffelPaymentProviderForCleanup
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt PaymentProviderFunction.Arn
+      Events:
+        UpsertPaymentMethodApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /payment-methods
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/upsertPaymentMethod.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  CreatePaymentComponentKeyFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-create-payment-component-key
+      CodeUri: .
+      Handler: createPaymentComponentKey.handler
+      Runtime: nodejs22.x
+      Timeout: 15
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          PAYMENT_PROVIDER_FUNCTION_NAME: !Ref PaymentProviderFunction
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeDuffelPaymentProvider
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt PaymentProviderFunction.Arn
+      Events:
+        CreatePaymentComponentKeyApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /payment-methods/component-key
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/createPaymentComponentKey.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  StripePaymentProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-stripe-payment-provider
+      CodeUri: .
+      Handler: stripePaymentProvider.handler
+      Runtime: nodejs22.x
+      Timeout: 25
+      MemorySize: 256
+      Environment:
+        Variables:
+          STRIPE_SECRET_ARN: !Ref StripeSecretArn
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: ReadStripeSecret
+              Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref StripeSecretArn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/stripePaymentProvider.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+
+  CreateAchSetupIntentFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-create-ach-setup-intent
+      CodeUri: .
+      Handler: createAchSetupIntent.handler
+      Runtime: nodejs22.x
+      Timeout: 20
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          STRIPE_PAYMENT_PROVIDER_FUNCTION_NAME: !Ref StripePaymentProviderFunction
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeStripePaymentProviderForSetup
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt StripePaymentProviderFunction.Arn
+      Events:
+        CreateAchSetupIntentApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /payment-methods/ach/setup
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/createAchSetupIntent.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  ConfirmAchSetupFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-confirm-ach-setup
+      CodeUri: .
+      Handler: confirmAchSetup.handler
+      Runtime: nodejs22.x
+      Timeout: 20
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          STRIPE_PAYMENT_PROVIDER_FUNCTION_NAME: !Ref StripePaymentProviderFunction
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeStripePaymentProviderForConfirmation
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt StripePaymentProviderFunction.Arn
+      Events:
+        ConfirmAchSetupApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /payment-methods/ach/confirm
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/confirmAchSetup.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  ValidateIpcmInvitationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-validate-ipcm-invitation
+      CodeUri: .
+      Handler: validateIpcmInvitation.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        ValidateIpcmInvitationApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /public/ipcm-invitations/{token}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/validateIpcmInvitation.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  AcceptIpcmInvitationFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - CognitoIdpVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-accept-ipcm-invitation
+      CodeUri: .
+      Handler: acceptIpcmInvitation.handler
+      Runtime: nodejs22.x
+      Timeout: 20
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          COGNITO_USER_POOL_ID: !Ref UserPool
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: CreateIpcmCognitoUsers
+              Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminSetUserPassword
+                - cognito-idp:AdminDeleteUser
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        AcceptIpcmInvitationApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /public/ipcm-invitations/{token}/accept
+            Method: POST
+            Auth:
+              Authorizer: NONE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/acceptIpcmInvitation.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  CreateTravelerProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-create-traveler-profile
+      CodeUri: .
+      Handler: createTravelerProfile.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        CreateTravelerProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /traveler-profiles
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/createTravelerProfile.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  UpdateTravelerProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-update-traveler-profile
+      CodeUri: .
+      Handler: updateTravelerProfile.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        UpdateTravelerProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /traveler-profiles/{id}
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/updateTravelerProfile.ts
         Minify: false
         Target: es2022
         Sourcemap: true
@@ -593,6 +1223,194 @@ Resources:
       BuildProperties:
         EntryPoints:
           - src/handlers/getTrips.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  GetPaymentMethodsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-get-payment-methods
+      CodeUri: .
+      Handler: getPaymentMethods.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        GetPaymentMethodsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /payment-methods
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/getPaymentMethods.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  GetIpcmsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: aurem-dev-get-ipcms
+      CodeUri: .
+      Handler: getIpcms.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        GetIpcmsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /ipcms
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/getIpcms.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  RemoveIpcmFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - CognitoIdpVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-remove-ipcm
+      CodeUri: .
+      Handler: removeIpcm.handler
+      Runtime: nodejs22.x
+      Timeout: 20
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          COGNITO_USER_POOL_ID: !Ref UserPool
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: DisableRemovedIpcm
+              Effect: Allow
+              Action:
+                - cognito-idp:AdminDisableUser
+                - cognito-idp:AdminEnableUser
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        RemoveIpcmApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /ipcms/{id}
+            Method: DELETE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/removeIpcm.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  InviteIpcmFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-invite-ipcm
+      CodeUri: .
+      Handler: inviteIpcm.handler
+      Runtime: nodejs22.x
+      Timeout: 15
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          EMAIL_SERVICE_FUNCTION_NAME: !Ref EmailServiceFunction
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeEmailServiceForIpcmInvitation
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt EmailServiceFunction.Arn
+      Events:
+        InviteIpcmApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /ipcms/invitations
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/inviteIpcm.ts
         Minify: false
         Target: es2022
         Sourcemap: true
@@ -1042,6 +1860,22 @@ Outputs:
     Description: Private interface endpoint used by VPC Lambdas to invoke AWS Lambda.
     Value: !Ref LambdaVpcEndpoint
 
+  PaymentProviderFunctionName:
+    Description: Public Lambda used for Duffel payment-provider operations.
+    Value: !Ref PaymentProviderFunction
+
+  StripePaymentProviderFunctionName:
+    Description: Public Lambda used for Stripe ACH payment-provider operations.
+    Value: !Ref StripePaymentProviderFunction
+
+  CreateAchSetupIntentEndpoint:
+    Description: Starts Stripe ACH payment-method setup.
+    Value: !Sub "https://${AuremApi}.execute-api.${AWS::Region}.amazonaws.com/dev/payment-methods/ach/setup"
+
+  ConfirmAchSetupEndpoint:
+    Description: Confirms and records Stripe ACH payment-method setup.
+    Value: !Sub "https://${AuremApi}.execute-api.${AWS::Region}.amazonaws.com/dev/payment-methods/ach/confirm"
+
   EmailServiceFunctionName:
     Description: Reusable non-VPC Lambda function that sends transactional email through Amazon SES.
     Value: !Ref EmailServiceFunction
@@ -1071,9 +1905,9 @@ Outputs:
     Value: !Ref SsmVpcEndpoint
 
   SesSenderEmail:
-    Description: Amazon SES sender identity configured for trip emails.
+    Description: Amazon SES sender identity configured for transactional emails.
     Value: !Ref SesSourceEmail
 
   FrontendBookingBaseUrl:
-    Description: Frontend base URL used in GC booking emails.
+    Description: Frontend base URL used in Aurem transactional emails.
     Value: !Ref FrontendBaseUrl
