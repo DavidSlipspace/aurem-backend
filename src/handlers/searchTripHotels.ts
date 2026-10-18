@@ -29,8 +29,8 @@ import type {
 type TripHotelSearchRow = {
   trip_reference_id: string;
 
-  gc_first_name: string;
-  gc_last_name: string;
+  traveler_first_name: string;
+  traveler_last_name: string;
 
   outbound_date:
     | Date
@@ -722,10 +722,10 @@ export async function handler(
               t.trip_reference_id,
 
               gp.legal_first_name
-                AS gc_first_name,
+                AS traveler_first_name,
 
               gp.legal_last_name
-                AS gc_last_name,
+                AS traveler_last_name,
 
               t.outbound_date,
               t.return_date,
@@ -745,9 +745,9 @@ export async function handler(
               ON t.id =
                 bl.trip_id
 
-            JOIN gc_profiles gp
+            JOIN traveler_profiles gp
               ON gp.id =
-                bl.gc_profile_id
+                bl.traveler_profile_id
 
             WHERE
               bl.token_hash = $1
@@ -1050,9 +1050,9 @@ export async function handler(
       );
     }
 
-    const gcName =
-      `${trip.gc_first_name} ` +
-      `${trip.gc_last_name}`;
+    const travelerName =
+      `${trip.traveler_first_name} ` +
+      `${trip.traveler_last_name}`;
 
     const response:
       SearchTripHotelsResult = {
@@ -1060,8 +1060,8 @@ export async function handler(
         trip
           .trip_reference_id,
 
-      gcName:
-        gcName.trim(),
+      travelerName:
+        travelerName.trim(),
 
       destination:
         providerResult

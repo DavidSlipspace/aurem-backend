@@ -3,7 +3,7 @@ import { getPool } from "../db/pool";
 import { jsonResponse } from "../common/response";
 import { assertAdminOrCaseManager, getCurrentUser } from "../common/currentUser";
 
-type CreateGcProfileRequest = {
+type CreateTravelerProfileRequest = {
   legalFirstName: string;
   legalMiddleName?: string;
   legalLastName: string;
@@ -32,7 +32,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return jsonResponse(403, { message: "User role is not authorized to create GC profiles." });
     }
 
-    const body = JSON.parse(event.body ?? "{}") as CreateGcProfileRequest;
+    const body = JSON.parse(event.body ?? "{}") as CreateTravelerProfileRequest;
 
     if (!body.legalFirstName || !body.legalLastName || !body.dateOfBirth || !body.email || !body.phone) {
       return jsonResponse(400, {
@@ -44,7 +44,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const result = await pool.query(
       `
-      INSERT INTO gc_profiles (
+      INSERT INTO traveler_profiles (
         company_id,
         legal_first_name,
         legal_middle_name,
@@ -84,7 +84,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       message: "GC profile created."
     });
   } catch (error) {
-    console.error("POST /gc-profiles error", error);
+    console.error("POST /traveler-profiles error", error);
     return jsonResponse(500, { message: "Unable to create GC profile." });
   }
 }

@@ -29,7 +29,7 @@ INSERT INTO roles (name, display_name)
 VALUES
   ('admin', 'Admin'),
   ('intake', 'Intake'),
-  ('gc_case_manager', 'GC Case Manager'),
+  ('traveler_case_manager', 'GC Case Manager'),
   ('ip_case_manager', 'IP Case Manager'),
   ('travel_coordinator', 'Travel Coordinator')
 ON CONFLICT (name) DO NOTHING;
