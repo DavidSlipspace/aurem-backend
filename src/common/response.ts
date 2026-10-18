@@ -14,7 +14,7 @@ export function jsonResponse(
         "application/json",
 
       "Access-Control-Allow-Origin":
-        "http://localhost:5173",
+        "https://app.orvotravel.com",
 
       "Access-Control-Allow-Headers":
         "Authorization,Content-Type",

@@ -50,7 +50,7 @@ Parameters:
 
   FrontendBaseUrl:
     Type: String
-    Default: http://localhost:5173
+    Default: https://app.orvotravel.com
     Description: Base URL used to create secure Aurem frontend links.
 
   DuffelAccessToken:
@@ -364,7 +364,7 @@ Resources:
       Cors:
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         AllowHeaders: "'Authorization,Content-Type'"
-        AllowOrigin: "'http://localhost:5173'"
+        AllowOrigin: "'https://app.orvotravel.com'"
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
         AddDefaultAuthorizerToCorsPreflight: false
@@ -378,7 +378,7 @@ Resources:
       RestApiId: !Ref AuremApi
       ResponseType: DEFAULT_4XX
       ResponseParameters:
-        gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
+        gatewayresponse.header.Access-Control-Allow-Origin: "'https://app.orvotravel.com'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
 
@@ -388,7 +388,7 @@ Resources:
       RestApiId: !Ref AuremApi
       ResponseType: DEFAULT_5XX
       ResponseParameters:
-        gatewayresponse.header.Access-Control-Allow-Origin: "'http://localhost:5173'"
+        gatewayresponse.header.Access-Control-Allow-Origin: "'https://app.orvotravel.com'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Authorization,Content-Type'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
 
