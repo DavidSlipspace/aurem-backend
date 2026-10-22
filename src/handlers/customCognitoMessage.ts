@@ -86,7 +86,7 @@ export async function handler(
     );
 
   event.response.emailSubject =
-    "Reset your Aurem password";
+    "Reset your Orvo password";
 
   event.response.emailMessage =
     `
