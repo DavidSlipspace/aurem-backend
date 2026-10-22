@@ -138,7 +138,7 @@ export async function handler(
                         font-weight: 700;
                       "
                     >
-                      Aurem
+                      Orvo
                     </td>
                   </tr>
 
@@ -169,7 +169,7 @@ export async function handler(
                           line-height: 1.2;
                         "
                       >
-                        Reset your Aurem password
+                        Reset your Orvo password
                       </h1>
 
                       <p
@@ -181,7 +181,7 @@ export async function handler(
                         "
                       >
                         We received a request to reset
-                        the password for your Aurem
+                        the password for your Orvo
                         account. Use the secure link
                         below to choose a new password.
                       </p>
