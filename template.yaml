@@ -902,6 +902,108 @@ Resources:
         Target: es2022
         Sourcemap: true
 
+  CreateCardSetupIntentFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-create-card-setup-intent
+      CodeUri: .
+      Handler: createCardSetupIntent.handler
+      Runtime: nodejs22.x
+      Timeout: 20
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          STRIPE_PAYMENT_PROVIDER_FUNCTION_NAME: !Ref StripePaymentProviderFunction
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeStripePaymentProvider
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt StripePaymentProviderFunction.Arn
+      Events:
+        createCardSetupIntentApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /payment-methods/card/setup
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/createCardSetupIntent.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
+  ConfirmCardSetupFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - LambdaVpcEndpoint
+    Properties:
+      FunctionName: aurem-dev-confirm-card-setup
+      CodeUri: .
+      Handler: confirmCardSetup.handler
+      Runtime: nodejs22.x
+      Timeout: 20
+      MemorySize: 256
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        SubnetIds:
+          - !Ref SubnetIdA
+          - !Ref SubnetIdB
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt AppDatabase.Endpoint.Address
+          DB_PORT: !GetAtt AppDatabase.Endpoint.Port
+          DB_NAME: !Ref DbName
+          DB_USER: !Ref DbUsername
+          DB_PASSWORD: !Ref DbPassword
+          STRIPE_PAYMENT_PROVIDER_FUNCTION_NAME: !Ref StripePaymentProviderFunction
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: InvokeStripePaymentProvider
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt StripePaymentProviderFunction.Arn
+      Events:
+        confirmCardSetupApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuremApi
+            Path: /payment-methods/card/confirm
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/confirmCardSetup.ts
+        Minify: false
+        Target: es2022
+        Sourcemap: true
+        External:
+          - pg-native
+
   CreateAchSetupIntentFunction:
     Type: AWS::Serverless::Function
     DependsOn:
