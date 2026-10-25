@@ -38,7 +38,11 @@ async function getStripe(): Promise<Stripe> {
   let key = raw;
   if (raw.startsWith("{")) {
     const secret = JSON.parse(raw) as Record<string, unknown>;
-    const candidate = secret.STRIPE_SECRET_KEY ?? secret.stripeSecretKey ?? secret.secretKey;
+    const candidate =
+          secret.STRIPE_SECRET_KEY ??
+          secret.stripeSecretKey ??
+          secret.secretKey ??
+          secret.key;
     if (!nonEmpty(candidate)) throw new Error("Stripe secret key not found in secret JSON.");
     key = candidate;
   }
