@@ -1,407 +1,66 @@
-import type {
-  APIGatewayProxyEvent,
-  APIGatewayProxyResult
-} from "aws-lambda";
-
-import {
-  getPool
-} from "../db/pool";
-
-import {
-  jsonResponse
-} from "../common/response";
-
-import {
-  getCurrentUser
-} from "../common/currentUser";
-
-type CreateTripRequest = {
-  caseId: string;
-
-  travelerProfileId:
-    string;
-
-  ipcmUserId:
-    string;
-
-  tripPurpose:
-    string;
-
-  outboundDate:
-    string;
-
-  returnDate:
-    string;
-
-  outboundAirport:
-    string;
-
-  returnAirport:
-    string;
-
-  destinationCity?:
-    string;
-
-  destinationAddress?:
-    string;
-
-  hotelProximityPreference?:
-    string;
-
-  minimumHotelStarRating?:
-    number;
-
-  budgetFilter:
-    number;
-
-  companionTraveler:
-    boolean;
-
-  ipcmApprovalRequired:
-    boolean;
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import { getPool } from "../db/pool";
+import { getCurrentUser } from "../common/currentUser";
+import { jsonResponse } from "../common/response";
+import { getAuthorizedCase, isCaseTraveler } from "../common/tripAuthorization";
+import { randomUUID } from "node:crypto";
+type TripBody = {
+  caseId: string; travelerProfileId: string; ipcmUserId?: string;
+  tripPurpose: string; outboundDate: string; returnDate: string;
+  outboundAirport: string; returnAirport: string;
+  destinationCity?: string; destinationAddress?: string;
+  hotelProximityPreference?: string; minimumHotelStarRating?: number;
+  budgetFilter: number; companionTraveler?: boolean;
+  ipcmApprovalRequired?: boolean; status?: string;
 };
 
-function buildTripReferenceId():
-  string {
-  return (
-    `TRIP-` +
-    `${new Date().getFullYear()}-` +
-    `${Date.now()}`
-  );
+function parseBody(event: APIGatewayProxyEvent): TripBody | null {
+  let body: Partial<TripBody>;
+  try { body = JSON.parse(event.body ?? "{}"); } catch { return null; }
+  if (!body || typeof body !== "object") return null;
+  for (const key of ["caseId", "travelerProfileId", "tripPurpose", "outboundDate", "returnDate", "outboundAirport", "returnAirport"] as const) {
+    if (typeof body[key] !== "string" || !body[key]?.trim()) return null;
+  }
+  if (typeof body.budgetFilter !== "number" || !Number.isFinite(body.budgetFilter) || body.budgetFilter < 0) return null;
+  if (body.minimumHotelStarRating != null && (!Number.isInteger(body.minimumHotelStarRating) || body.minimumHotelStarRating < 1 || body.minimumHotelStarRating > 5)) return null;
+  if (body.returnDate! < body.outboundDate!) return null;
+  return body as TripBody;
 }
 
-export async function handler(
-  event:
-    APIGatewayProxyEvent
-): Promise<
-  APIGatewayProxyResult
-> {
+export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   try {
-    const currentUser =
-      await getCurrentUser(
-        event
-      );
-
-    if (
-      !currentUser
-    ) {
-      return jsonResponse(
-        403,
-        {
-          message:
-            "Authenticated user does not exist in Aurem database."
-        }
-      );
-    }
-
-    if (
-      ![
-        "admin",
-        "case_manager"
-      ].includes(
-        currentUser.roleName
-      )
-    ) {
-      return jsonResponse(
-        403,
-        {
-          message:
-            "User role is not authorized to create trips."
-        }
-      );
-    }
-
-    const body =
-      JSON.parse(
-        event.body ??
-          "{}"
-      ) as
-        CreateTripRequest;
-
-    if (
-      !body.caseId ||
-      !body.travelerProfileId ||
-      !body.ipcmUserId ||
-      !body.tripPurpose ||
-      !body.outboundDate ||
-      !body.returnDate ||
-      !body.outboundAirport ||
-      !body.returnAirport ||
-      body.budgetFilter ===
-        undefined
-    ) {
-      return jsonResponse(
-        400,
-        {
-          message:
-            "Missing required fields."
-        }
-      );
-    }
-
-    const pool =
-      getPool();
-
-    const caseAccessResult =
-      await pool.query(
-        `
-        SELECT
-          c.id
-
-        FROM cases c
-
-        WHERE
-          c.id = $1
-
-          AND (
-            (
-              $2 = 'admin'
-
-              AND
-              c.company_id = $3
-            )
-
-            OR
-
-            (
-              $2 = 'case_manager'
-
-              AND
-              c.case_manager_user_id = $4
-            )
-          )
-
-        LIMIT 1;
-        `,
-        [
-          body.caseId,
-
-          currentUser.roleName,
-
-          currentUser.companyId,
-
-          currentUser.id
-        ]
-      );
-
-    if (
-      caseAccessResult.rowCount ===
-      0
-    ) {
-      return jsonResponse(
-        403,
-        {
-          message:
-            "User is not authorized to create a trip for this case."
-        }
-      );
-    }
-
-    const travelerAccessResult =
-      await pool.query(
-        `
-        SELECT
-          id
-
-        FROM traveler_profiles
-
-        WHERE
-          id = $1
-
-          AND
-          company_id = $2
-
-          AND
-          status = 'active'
-
-        LIMIT 1;
-        `,
-        [
-          body.travelerProfileId,
-
-          currentUser.companyId
-        ]
-      );
-
-    if (
-      travelerAccessResult.rowCount ===
-      0
-    ) {
-      return jsonResponse(
-        400,
-        {
-          message:
-            "Traveler profile not found or inactive."
-        }
-      );
-    }
-
-    const ipcmAccessResult =
-      await pool.query(
-        `
-        SELECT
-          u.id
-
-        FROM users u
-
-        JOIN user_roles ur
-          ON ur.user_id =
-            u.id
-
-        JOIN roles r
-          ON r.id =
-            ur.role_id
-
-        WHERE
-          u.id = $1
-
-          AND
-          u.company_id = $2
-
-          AND
-          u.status = 'active'
-
-          AND
-          r.name = 'ipcm'
-
-        LIMIT 1;
-        `,
-        [
-          body.ipcmUserId,
-
-          currentUser.companyId
-        ]
-      );
-
-    if (
-      ipcmAccessResult.rowCount ===
-      0
-    ) {
-      return jsonResponse(
-        400,
-        {
-          message:
-            "Selected IPCM was not found or is inactive."
-        }
-      );
-    }
-
-    const result =
-      await pool.query(
-        `
+    const user = await getCurrentUser(event);
+    if (!user) return jsonResponse(403, { message: "Authenticated user does not exist in Aurem database." });
+    if (!["admin", "case_manager"].includes(user.roleName)) return jsonResponse(403, { message: "User role is not authorized to create trips." });
+    const body = parseBody(event);
+    if (!body) return jsonResponse(400, { message: "Invalid or missing trip fields." });
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const selectedCase = await getAuthorizedCase(client, user, body.caseId);
+      if (!selectedCase) { await client.query("ROLLBACK"); return jsonResponse(403, { message: "User is not authorized to create a trip for this case." }); }
+      if (!(await isCaseTraveler(client, user.companyId, body.caseId, body.travelerProfileId))) {
+        await client.query("ROLLBACK");
+        return jsonResponse(400, { message: "Traveler must be active and assigned to the selected case." });
+      }
+      const tripReferenceId = `TRIP-${new Date().getUTCFullYear()}-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      const result = await client.query<{id: string; trip_reference_id: string}>(`
         INSERT INTO trips (
-          trip_reference_id,
-          case_id,
-          traveler_profile_id,
-          case_manager_user_id,
-          trip_purpose,
-          status,
-          outbound_date,
-          return_date,
-          outbound_airport,
-          return_airport,
-          destination_city,
-          destination_address,
-          hotel_proximity_preference,
-          minimum_hotel_star_rating,
-          budget_filter,
-          companion_traveler,
-          ipcm_approval_required
-        )
-
-        VALUES (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          'Created',
-          $6,
-          $7,
-          $8,
-          $9,
-          $10,
-          $11,
-          $12,
-          $13,
-          $14,
-          $15,
-          $16
-        )
-
-        RETURNING
-          id,
-          trip_reference_id;
-        `,
-        [
-          buildTripReferenceId(),
-
-          body.caseId,
-
-          body.travelerProfileId,
-
-          body.ipcmUserId,
-
-          body.tripPurpose,
-
-          body.outboundDate,
-
-          body.returnDate,
-
-          body.outboundAirport,
-
-          body.returnAirport,
-
-          body.destinationCity ??
-            null,
-
-          body.destinationAddress ??
-            null,
-
-          body.hotelProximityPreference ??
-            null,
-
-          body.minimumHotelStarRating ??
-            null,
-
-          body.budgetFilter,
-
-          body.companionTraveler ??
-            false,
-
-          body.ipcmApprovalRequired ??
-            false
-        ]
-      );
-
-    return jsonResponse(
-      201,
-      {
-        id:
-          result.rows[0].id,
-
-        tripReferenceId:
-          result.rows[0]
-            .trip_reference_id,
-
-        message:
-          "Trip created."
-      }
-    );
-  } catch (
-    error
-  ) {
-    console.error(
-      "POST /trips error",
-      error
-    );
-
-    return jsonResponse(
-      500,
-      {
-        message:
-          "Unable to create trip."
-      }
-    );
-  }
+          trip_reference_id, case_id, traveler_profile_id, case_manager_user_id,
+          trip_purpose, status, outbound_date, return_date, outbound_airport,
+          return_airport, destination_city, destination_address,
+          hotel_proximity_preference, minimum_hotel_star_rating, budget_filter,
+          companion_traveler, ipcm_approval_required
+        ) VALUES ($1,$2,$3,$4,$5,'Created',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        RETURNING id, trip_reference_id
+      `, [tripReferenceId, body.caseId, body.travelerProfileId, selectedCase.case_manager_user_id,
+        body.tripPurpose, body.outboundDate, body.returnDate, body.outboundAirport,
+        body.returnAirport, body.destinationCity ?? null, body.destinationAddress ?? null,
+        body.hotelProximityPreference ?? null, body.minimumHotelStarRating ?? null,
+        body.budgetFilter, body.companionTraveler ?? false, body.ipcmApprovalRequired ?? false]);
+      await client.query("COMMIT");
+      return jsonResponse(201, { id: result.rows[0].id, tripReferenceId: result.rows[0].trip_reference_id, message: "Trip created." });
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  } catch (error) { console.error("POST /trips error", error); return jsonResponse(500, { message: "Unable to create trip." }); }
 }
