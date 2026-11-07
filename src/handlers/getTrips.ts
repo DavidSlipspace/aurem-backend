@@ -198,51 +198,11 @@ export async function handler(
       );
     }
 
-    let whereClause =
-      "";
-
-    const params:
-      string[] = [];
-
-    if (
-      currentUser.roleName ===
-      "admin"
-    ) {
-      whereClause =
-        "c.company_id = $1";
-
-      params.push(
-        currentUser.companyId
-      );
-    } else if (
-      currentUser.roleName ===
-      "case_manager"
-    ) {
-      whereClause =
-        "c.case_manager_user_id = $1";
-
-      params.push(
-        currentUser.id
-      );
-    } else if (
-      currentUser.roleName ===
-      "ipcm"
-    ) {
-      whereClause =
-        "t.case_manager_user_id = $1";
-
-      params.push(
-        currentUser.id
-      );
-    } else {
-      return jsonResponse(
-        403,
-        {
-          message:
-            "User role is not authorized to view trips."
-        }
-      );
+    if (!["admin", "case_manager"].includes(currentUser.roleName)) {
+      return jsonResponse(403, { message: "User role is not authorized to view trips." });
     }
+    const whereClause = "c.company_id = $1 AND ($2 = 'admin' OR c.case_manager_user_id = $3)";
+    const params: string[] = [currentUser.companyId, currentUser.roleName, currentUser.id];
 
     const result =
       await getPool()
