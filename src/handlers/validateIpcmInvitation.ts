@@ -126,7 +126,7 @@ export async function handler(
     error
   ) {
     console.error(
-      "GET IPCM invitation failed",
+      "GET Case Manager invitation failed",
       error
     );
 
@@ -134,7 +134,7 @@ export async function handler(
       500,
       {
         message:
-          "Unable to validate the IPCM invitation."
+          "Unable to validate the Case Manager invitation."
       }
     );
   }

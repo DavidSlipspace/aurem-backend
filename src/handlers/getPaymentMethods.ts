@@ -1,3 +1,4 @@
+
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult
@@ -17,106 +18,73 @@ import {
 } from "../services/payments/paymentMethodService";
 
 export async function handler(
-  event:
-    APIGatewayProxyEvent
-): Promise<
-  APIGatewayProxyResult
-> {
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> {
   try {
-    const currentUser =
-      await getCurrentUser(
-        event
-      );
+    const currentUser = await getCurrentUser(event);
 
-    if (
-      !currentUser
-    ) {
-      return jsonResponse(
-        403,
-        {
-          message:
-            "Authenticated user does not exist in the Aurem database."
-        }
-      );
+    if (!currentUser) {
+      return jsonResponse(403, {
+        message:
+          "Authenticated user does not exist in the Orvo database."
+      });
     }
 
-    if (
-      currentUser.roleName ===
-        "admin"
-    ) {
+    // Admins can access payment profiles
+    // for Case Managers within their company.
+    if (currentUser.roleName === "admin") {
       const profiles =
         await getCompanyIpcmPaymentProfiles(
           currentUser.companyId
         );
 
-      return jsonResponse(
-        200,
-        {
-          mode:
-            "admin",
-
-          ipcms:
-            profiles
-        }
-      );
+      return jsonResponse(200, {
+        mode: "admin",
+        ipcms: profiles
+      });
     }
 
-    if (
-      currentUser.roleName !==
-        "ipcm"
-    ) {
-      return jsonResponse(
-        403,
-        {
-          message:
-            "Only Admin and Case Manager users can access payment profiles."
-        }
-      );
+    // Support both the legacy IPCM role and
+    // the newer Case Manager role.
+    const isCaseManager =
+      currentUser.roleName === "case_manager" ||
+      currentUser.roleName === "ipcm";
+
+    if (!isCaseManager) {
+      return jsonResponse(403, {
+        message:
+          "Only Admin and Case Manager users can access payment profiles."
+      });
     }
 
+    // Case Managers can access only their
+    // own payment profile.
     const profile =
       await getSelfIpcmPaymentProfile(
         currentUser.id,
         currentUser.companyId
       );
 
-    if (
-      !profile
-    ) {
-      return jsonResponse(
-        404,
-        {
-          message:
-            "Your Case Manager payment profile could not be found."
-        }
-      );
+    if (!profile) {
+      return jsonResponse(404, {
+        message:
+          "Your Case Manager payment profile could not be found."
+      });
     }
 
-    return jsonResponse(
-      200,
-      {
-        mode:
-          "self",
-
-        ipcms: [
-          profile
-        ]
-      }
-    );
-  } catch (
-    error
-  ) {
+    return jsonResponse(200, {
+      mode: "self",
+      ipcms: [profile]
+    });
+  } catch (error) {
     console.error(
       "GET /payment-methods failed",
       error
     );
 
-    return jsonResponse(
-      500,
-      {
-        message:
-          "Unable to load payment methods."
-      }
-    );
+    return jsonResponse(500, {
+      message:
+        "Unable to load payment methods."
+    });
   }
 }

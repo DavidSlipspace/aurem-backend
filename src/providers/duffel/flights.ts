@@ -136,6 +136,11 @@ export function isFlightProviderRequest(
       value.returnAirportCode
     ) &&
 
+    (value.destinationAirportCode === undefined ||
+      (typeof value.destinationAirportCode === "string" && /^[A-Za-z]{3}$/.test(value.destinationAirportCode))) &&
+    (value.returnDepartureAirportCode === undefined ||
+      (typeof value.returnDepartureAirportCode === "string" && /^[A-Za-z]{3}$/.test(value.returnDepartureAirportCode))) &&
+
     typeof value.destinationQuery ===
       "string" &&
 
@@ -869,7 +874,7 @@ async function createOfferRequest(
                   ),
 
                 destination:
-                  destinationCode,
+                  normalizeAirportCode(request.destinationAirportCode ?? destinationCode),
 
                 departure_date:
                   request.outboundDate
@@ -877,7 +882,7 @@ async function createOfferRequest(
 
               {
                 origin:
-                  destinationCode,
+                  normalizeAirportCode(request.returnDepartureAirportCode ?? request.destinationAirportCode ?? destinationCode),
 
                 destination:
                   normalizeAirportCode(
@@ -923,7 +928,7 @@ async function listOffers(
   /*
    * Pull more than we ultimately display.
    *
-   * This gives Aurem enough inventory to apply its own
+   * This gives Orvo enough inventory to apply its own
    * ranking after Duffel sorts the provider results by
    * total price.
    */
@@ -988,11 +993,9 @@ export async function searchFlights(
       request.returnAirportCode
     );
 
-  const destination =
-    await resolveDestinationPlace(
-      request.destinationQuery,
-      accessToken
-    );
+  const destination = request.destinationAirportCode
+    ? { name: request.destinationQuery, code: normalizeAirportCode(request.destinationAirportCode) }
+    : await resolveDestinationPlace(request.destinationQuery, accessToken);
 
   console.log(
     "Resolved flight destination",

@@ -145,7 +145,7 @@ export async function handler(
         403,
         {
           message:
-            "Authenticated user does not exist in the Aurem database."
+            "Authenticated user does not exist in the Orvo database."
         }
       );
     }

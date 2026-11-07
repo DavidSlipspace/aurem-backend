@@ -43,6 +43,8 @@ type TripFlightSearchRow = {
   outbound_airport: string;
 
   return_airport: string;
+  return_departure_airport: string | null;
+  return_arrival_airport: string | null;
 
   destination_city:
     | string
@@ -521,6 +523,8 @@ export async function handler(
 
               t.outbound_airport,
               t.return_airport,
+               t.return_departure_airport,
+               t.return_arrival_airport,
 
               t.destination_city,
 
@@ -609,6 +613,17 @@ export async function handler(
       );
     }
 
+    const returnDepartureAirportCode = normalizeAirportCode(
+      trip.return_departure_airport ?? trip.return_airport
+    );
+    const returnArrivalAirportCode = normalizeAirportCode(
+      trip.return_arrival_airport ?? trip.outbound_airport
+    );
+    if (!returnDepartureAirportCode || !returnArrivalAirportCode) {
+      return errorResponse(400, "INVALID_AIRPORT", "The trip contains an invalid airport",
+        "The return journey contains an invalid airport. Please contact your case manager.", false);
+    }
+
     const outboundDate =
       normalizeDateValue(
         trip.outbound_date
@@ -691,7 +706,10 @@ export async function handler(
       FlightProviderRequest = {
       originAirportCode,
 
-      returnAirportCode,
+      returnAirportCode: returnArrivalAirportCode,
+
+      destinationAirportCode: returnAirportCode,
+      returnDepartureAirportCode,
 
       destinationQuery,
 
