@@ -291,7 +291,7 @@ export async function handler(
         409,
         {
           message:
-            "An Aurem user already exists with this email address."
+            "An Orvo user already exists with this email address."
         }
       );
     }
@@ -489,7 +489,7 @@ export async function handler(
       201,
       {
         message:
-          "Your Aurem Case Manager account has been created."
+          "Your Orvo Case Manager account has been created."
       }
     );
   } catch (

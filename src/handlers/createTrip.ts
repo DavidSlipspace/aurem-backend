@@ -30,7 +30,7 @@ function parseBody(event: APIGatewayProxyEvent): TripBody | null {
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   try {
     const user = await getCurrentUser(event);
-    if (!user) return jsonResponse(403, { message: "Authenticated user does not exist in Aurem database." });
+    if (!user) return jsonResponse(403, { message: "Authenticated user does not exist in Orvo database." });
     if (!["admin", "case_manager"].includes(user.roleName)) return jsonResponse(403, { message: "User role is not authorized to create trips." });
     const body = parseBody(event);
     if (!body) return jsonResponse(400, { message: "Invalid or missing trip fields." });

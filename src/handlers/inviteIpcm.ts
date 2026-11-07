@@ -170,11 +170,11 @@ function buildInvitationEmail(
       email,
 
     subject:
-      "You've been invited to Aurem",
+      "You've been invited to Orvo",
 
     textBody:
       [
-        "You've been invited to create an Case Manager account in Aurem.",
+        "You've been invited to create an Case Manager account in Orvo.",
         "",
         "Use the secure link below to complete your profile:",
         invitationUrl,
@@ -199,7 +199,7 @@ function buildInvitationEmail(
             />
 
             <title>
-              Aurem Invitation
+              Orvo Invitation
             </title>
           </head>
 
@@ -259,7 +259,7 @@ function buildInvitationEmail(
                             700;
                         "
                       >
-                        Aurem
+                        Orvo
                       </td>
                     </tr>
 
@@ -301,7 +301,7 @@ function buildInvitationEmail(
                               1.2;
                           "
                         >
-                          You've been invited to Aurem
+                          You've been invited to Orvo
                         </h1>
 
                         <p
@@ -316,7 +316,7 @@ function buildInvitationEmail(
                               1.6;
                           "
                         >
-                          An Aurem Administrator
+                          An Orvo Administrator
                           has invited
                           <strong>${safeEmail}</strong>
                           to create an Case Manager account.
@@ -360,7 +360,7 @@ function buildInvitationEmail(
                               none;
                           "
                         >
-                          Create Aurem Account
+                          Create Orvo Account
                         </a>
 
                         <p
@@ -405,7 +405,7 @@ export async function handler(
       403,
       {
         message:
-          "Authenticated user does not exist in the Aurem database."
+          "Authenticated user does not exist in the Orvo database."
       }
     );
   }
@@ -633,7 +633,7 @@ export async function handler(
         409,
         {
           message:
-            "A user with this email address already has an Aurem account."
+            "A user with this email address already has an Orvo account."
         }
       );
     }

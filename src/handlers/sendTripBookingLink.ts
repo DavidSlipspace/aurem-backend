@@ -253,7 +253,7 @@ function createTextEmail(
     "",
     "If you were not expecting this email, you can safely ignore it.",
     "",
-    "Aurem Travel"
+    "Orvo Travel"
   ].join(
     "\n"
   );
@@ -291,7 +291,7 @@ function createHtmlEmail(
         />
 
         <title>
-          Your Aurem travel request
+          Your Orvo travel request
         </title>
       </head>
 
@@ -351,7 +351,7 @@ function createHtmlEmail(
                         letter-spacing: -0.02em;
                       "
                     >
-                      Aurem Travel
+                      Orvo Travel
                     </p>
 
                     <p
@@ -584,7 +584,7 @@ export async function handler(
         403,
         {
           message:
-            "Authenticated user does not exist in the Aurem database."
+            "Authenticated user does not exist in the Orvo database."
         }
       );
     }
@@ -1017,7 +1017,7 @@ export async function handler(
             trip.traveler_email,
 
           subject:
-            "Your Aurem travel request is ready",
+            "Your Orvo travel request is ready",
 
           textBody:
             createTextEmail(

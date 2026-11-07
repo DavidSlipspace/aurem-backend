@@ -923,7 +923,7 @@ async function listOffers(
   /*
    * Pull more than we ultimately display.
    *
-   * This gives Aurem enough inventory to apply its own
+   * This gives Orvo enough inventory to apply its own
    * ranking after Duffel sorts the provider results by
    * total price.
    */
