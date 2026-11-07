@@ -170,11 +170,11 @@ function buildInvitationEmail(
       email,
 
     subject:
-      "You've been invited to Aurem",
+      "You've been invited to Orvo",
 
     textBody:
       [
-        "You've been invited to create an IPCM account in Aurem.",
+        "You've been invited to create an Case Manager account in Orvo.",
         "",
         "Use the secure link below to complete your profile:",
         invitationUrl,
@@ -199,7 +199,7 @@ function buildInvitationEmail(
             />
 
             <title>
-              Aurem Invitation
+              Orvo Invitation
             </title>
           </head>
 
@@ -259,7 +259,7 @@ function buildInvitationEmail(
                             700;
                         "
                       >
-                        Aurem
+                        Orvo
                       </td>
                     </tr>
 
@@ -286,7 +286,7 @@ function buildInvitationEmail(
                               uppercase;
                           "
                         >
-                          IPCM Invitation
+                          Case Manager Invitation
                         </p>
 
                         <h1
@@ -301,7 +301,7 @@ function buildInvitationEmail(
                               1.2;
                           "
                         >
-                          You've been invited to Aurem
+                          You've been invited to Orvo
                         </h1>
 
                         <p
@@ -316,10 +316,10 @@ function buildInvitationEmail(
                               1.6;
                           "
                         >
-                          An Aurem Administrator
+                          An Orvo Administrator
                           has invited
                           <strong>${safeEmail}</strong>
-                          to create an IPCM account.
+                          to create an Case Manager account.
                         </p>
 
                         <p
@@ -360,7 +360,7 @@ function buildInvitationEmail(
                               none;
                           "
                         >
-                          Create Aurem Account
+                          Create Orvo Account
                         </a>
 
                         <p
@@ -405,7 +405,7 @@ export async function handler(
       403,
       {
         message:
-          "Authenticated user does not exist in the Aurem database."
+          "Authenticated user does not exist in the Orvo database."
       }
     );
   }
@@ -433,7 +433,7 @@ export async function handler(
       400,
       {
         message:
-          "A valid IPCM email address is required."
+          "A valid Case Manager email address is required."
       }
     );
   }
@@ -451,7 +451,7 @@ export async function handler(
     !frontendBaseUrl
   ) {
     console.error(
-      "IPCM invitation configuration is incomplete.",
+      "Case Manager invitation configuration is incomplete.",
       {
         emailServiceConfigured:
           Boolean(
@@ -469,7 +469,7 @@ export async function handler(
       500,
       {
         message:
-          "IPCM invitations have not been configured."
+          "Case Manager invitations have not been configured."
       }
     );
   }
@@ -553,7 +553,7 @@ export async function handler(
     );
 
     console.log(
-      "IPCM invitation sent",
+      "Case Manager invitation sent",
       {
         invitationId:
           invitation.invitationId,
@@ -570,7 +570,7 @@ export async function handler(
       201,
       {
         message:
-          "IPCM invitation sent successfully.",
+          "Case Manager invitation sent successfully.",
 
         invitation: {
           id:
@@ -618,7 +618,7 @@ export async function handler(
         revokeError
       ) {
         console.error(
-          "Unable to revoke failed IPCM invitation",
+          "Unable to revoke failed Case Manager invitation",
           revokeError
         );
       }
@@ -633,7 +633,7 @@ export async function handler(
         409,
         {
           message:
-            "A user with this email address already has an Aurem account."
+            "A user with this email address already has an Orvo account."
         }
       );
     }
@@ -647,7 +647,7 @@ export async function handler(
       500,
       {
         message:
-          "Unable to send the IPCM invitation."
+          "Unable to send the Case Manager invitation."
       }
     );
   }

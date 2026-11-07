@@ -19,7 +19,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       LIMIT 1
     `, [claims.sub]);
     const user = result.rows[0];
-    if (!user) return jsonResponse(403, { message: "Authenticated user does not exist in Aurem database." });
+    if (!user) return jsonResponse(403, { message: "Authenticated user does not exist in Orvo database." });
     const role = ["ipcm", "case_manager"].includes(user.role_name) ? "Case Manager" : user.role_display_name;
     return jsonResponse(200, {
       email: user.email, firstName: user.first_name, lastName: user.last_name,

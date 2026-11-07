@@ -49,7 +49,7 @@ export async function handler(
       403,
       {
         message:
-          "Authenticated user does not exist in the Aurem database."
+          "Authenticated user does not exist in the Orvo database."
       }
     );
   }
@@ -82,7 +82,7 @@ export async function handler(
       400,
       {
         message:
-          "IPCM ID is required."
+          "Case Manager ID is required."
       }
     );
   }
@@ -97,7 +97,7 @@ export async function handler(
       400,
       {
         message:
-          "A valid IPCM resource type is required."
+          "A valid Case Manager resource type is required."
       }
     );
   }
@@ -118,7 +118,7 @@ export async function handler(
           404,
           {
             message:
-              "The IPCM invitation could not be found or has already been removed."
+              "The Case Manager invitation could not be found or has already been removed."
           }
         );
       }
@@ -127,7 +127,7 @@ export async function handler(
         200,
         {
           message:
-            "IPCM invitation removed."
+            "Case Manager invitation removed."
         }
       );
     }
@@ -143,7 +143,7 @@ export async function handler(
         404,
         {
           message:
-            "The IPCM profile could not be found."
+            "The Case Manager profile could not be found."
         }
       );
     }
@@ -170,7 +170,7 @@ export async function handler(
         409,
         {
           message:
-            `This IPCM cannot be removed because they are still assigned to ${caseText} and ${tripText}. Reassign those records first.`
+            `This Case Manager cannot be removed because they are still assigned to ${caseText} and ${tripText}. Reassign those records first.`
         }
       );
     }
@@ -235,7 +235,7 @@ export async function handler(
           rollbackError
         ) {
           console.error(
-            "Unable to re-enable Cognito IPCM after failed removal",
+            "Unable to re-enable Cognito Case Manager after failed removal",
             rollbackError
           );
         }
@@ -248,7 +248,7 @@ export async function handler(
       200,
       {
         message:
-          `${candidate.email} was removed from active IPCM access.`
+          `${candidate.email} was removed from active Case Manager access.`
       }
     );
   } catch (error) {
@@ -261,7 +261,7 @@ export async function handler(
       500,
       {
         message:
-          "Unable to remove the IPCM."
+          "Unable to remove the Case Manager."
       }
     );
   }

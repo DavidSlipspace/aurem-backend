@@ -99,22 +99,22 @@ export function buildCaseAssignmentEmail(
         );
 
   const subject =
-    `New Aurem case assigned: ${input.caseReferenceId}`;
+    `New Orvo case assigned: ${input.caseReferenceId}`;
 
   const textBody =
     [
       `Hello ${input.recipientFirstName},`,
       "",
-      "A new case has been assigned to you in Aurem.",
+      "A new case has been assigned to you in Orvo.",
       "",
       `Case: ${input.caseReferenceId}`,
       suggestedBudgetText,
       "",
-      "Please sign in to Aurem to review the case and set the approved case budget.",
+      "Please sign in to Orvo to review the case and set the approved case budget.",
       "",
       portalUrl,
       "",
-      "Aurem"
+      "Orvo"
     ].join(
       "\n"
     );
@@ -140,7 +140,7 @@ export function buildCaseAssignmentEmail(
         <p>
           A new case has been
           assigned to you in
-          Aurem.
+          Orvo.
         </p>
 
         <div
@@ -175,7 +175,7 @@ export function buildCaseAssignmentEmail(
         </div>
 
         <p>
-          Please sign in to Aurem
+          Please sign in to Orvo
           to review the case and
           set the approved case
           budget.
@@ -203,7 +203,7 @@ export function buildCaseAssignmentEmail(
                 700;
             "
           >
-            Open Aurem
+            Open Orvo
           </a>
         </p>
 
@@ -214,7 +214,7 @@ export function buildCaseAssignmentEmail(
             font-size: 13px;
           "
         >
-          Aurem
+          Orvo
         </p>
       </div>
     `;

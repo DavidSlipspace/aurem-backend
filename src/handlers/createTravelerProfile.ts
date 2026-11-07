@@ -23,7 +23,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const currentUser = await getCurrentUser(event);
 
     if (!currentUser) {
-      return jsonResponse(403, { message: "Authenticated user does not exist in Aurem database." });
+      return jsonResponse(403, { message: "Authenticated user does not exist in Orvo database." });
     }
 
     try {

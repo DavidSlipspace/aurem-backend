@@ -209,7 +209,7 @@ async function getIpcmUser(
   if (!user) {
     throw new CaseServiceError(
       "INVALID_ASSIGNEE",
-      "Case Manager is not an active IPCM user in this company."
+      "Case Manager is not an active Case Manager user in this company."
     );
   }
 

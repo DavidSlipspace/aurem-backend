@@ -6,7 +6,7 @@ import { assertAdminOrCaseManager, getCurrentUser } from "../common/currentUser"
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   try {
     const user = await getCurrentUser(event);
-    if (!user) return jsonResponse(403, { message: "Authenticated user does not exist in Aurem database." });
+    if (!user) return jsonResponse(403, { message: "Authenticated user does not exist in Orvo database." });
     try { assertAdminOrCaseManager(user); }
     catch { return jsonResponse(403, { message: "User role is not authorized to view traveler profiles." }); }
     const result = await getPool().query(`
