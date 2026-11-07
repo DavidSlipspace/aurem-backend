@@ -46,6 +46,8 @@ type BookingLinkTripRow = {
 
   outbound_airport: string;
   return_airport: string;
+  return_departure_airport: string | null;
+  return_arrival_airport: string | null;
 
   ipcm_approval_required: boolean;
 };
@@ -383,6 +385,8 @@ export async function handler(
 
               t.outbound_airport,
               t.return_airport,
+               t.return_departure_airport,
+               t.return_arrival_airport,
 
               t.ipcm_approval_required
 
@@ -488,25 +492,17 @@ export async function handler(
       );
     }
 
+    const expectedOutboundArrival = normalizeAirport(booking.return_airport);
+    const expectedReturnDeparture = normalizeAirport(booking.return_departure_airport ?? booking.return_airport);
+    const expectedReturnArrival = normalizeAirport(booking.return_arrival_airport ?? booking.outbound_airport);
     if (
-      normalizeAirport(
-        returnJourney
-          .destinationAirportCode
-      ) !==
-      normalizeAirport(
-        booking.return_airport
-      )
+      normalizeAirport(outbound.destinationAirportCode) !== expectedOutboundArrival ||
+      normalizeAirport(returnJourney.originAirportCode) !== expectedReturnDeparture ||
+      normalizeAirport(returnJourney.destinationAirportCode) !== expectedReturnArrival
     ) {
-      await client.query(
-        "ROLLBACK"
-      );
-
-      return errorResponse(
-        400,
-        "FLIGHT_DOES_NOT_MATCH_TRIP",
-        "The selected flight does not match this trip",
-        "The return destination on the selected flight does not match the trip. Please choose another flight."
-      );
+      await client.query("ROLLBACK");
+      return errorResponse(400, "FLIGHT_DOES_NOT_MATCH_TRIP", "The selected flight does not match this trip",
+        "The selected flight airports do not match the trip itinerary. Please choose another flight.");
     }
 
     if (

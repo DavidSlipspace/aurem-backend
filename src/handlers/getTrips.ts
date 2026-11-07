@@ -64,6 +64,9 @@ type TripRow = {
   return_airport:
     string;
 
+  return_departure_airport: string | null;
+  return_arrival_airport: string | null;
+
   destination_city:
     | string
     | null;
@@ -248,6 +251,8 @@ export async function handler(
             t.outbound_airport,
 
             t.return_airport,
+            t.return_departure_airport,
+            t.return_arrival_airport,
 
             t.destination_city,
 
@@ -439,6 +444,9 @@ export async function handler(
 
               returnAirport:
                 row.return_airport,
+
+              returnDepartureAirport: row.return_departure_airport,
+              returnArrivalAirport: row.return_arrival_airport,
 
               destinationCity:
                 row.destination_city,

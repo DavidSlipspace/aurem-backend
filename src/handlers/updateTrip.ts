@@ -7,6 +7,7 @@ type TripBody = {
   caseId: string; travelerProfileId: string; ipcmUserId?: string;
   tripPurpose: string; outboundDate: string; returnDate: string;
   outboundAirport: string; returnAirport: string;
+  returnDepartureAirport?: string | null; returnArrivalAirport?: string | null;
   destinationCity?: string; destinationAddress?: string;
   hotelProximityPreference?: string; minimumHotelStarRating?: number;
   budgetFilter: number; companionTraveler?: boolean;
@@ -16,16 +17,26 @@ type TripBody = {
 function parseBody(event: APIGatewayProxyEvent): TripBody | null {
   let body: Partial<TripBody>;
   try { body = JSON.parse(event.body ?? "{}"); } catch { return null; }
-  if (!body || typeof body !== "object") return null;
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
   for (const key of ["caseId", "travelerProfileId", "tripPurpose", "outboundDate", "returnDate", "outboundAirport", "returnAirport"] as const) {
     if (typeof body[key] !== "string" || !body[key]?.trim()) return null;
+  }
+  for (const key of ["outboundAirport", "returnAirport"] as const) {
+    const value = body[key];
+    if (typeof value !== "string" || !/^[A-Za-z]{3}$/.test(value.trim())) return null;
+    body[key] = value.trim().toUpperCase();
+  }
+  for (const key of ["returnDepartureAirport", "returnArrivalAirport"] as const) {
+    const value = body[key];
+    if (value === undefined || value === null || value === "") { body[key] = null; continue; }
+    if (typeof value !== "string" || !/^[A-Za-z]{3}$/.test(value.trim())) return null;
+    body[key] = value.trim().toUpperCase();
   }
   if (typeof body.budgetFilter !== "number" || !Number.isFinite(body.budgetFilter) || body.budgetFilter < 0) return null;
   if (body.minimumHotelStarRating != null && (!Number.isInteger(body.minimumHotelStarRating) || body.minimumHotelStarRating < 1 || body.minimumHotelStarRating > 5)) return null;
   if (body.returnDate! < body.outboundDate!) return null;
   return body as TripBody;
 }
-
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   try {
     const user = await getCurrentUser(event);
@@ -56,13 +67,15 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           return_airport=$8, destination_city=$9, destination_address=$10,
           hotel_proximity_preference=$11, minimum_hotel_star_rating=$12,
           budget_filter=$13, companion_traveler=$14, ipcm_approval_required=$15,
+          return_departure_airport=$16, return_arrival_airport=$17,
           updated_at=CURRENT_TIMESTAMP
-        WHERE id=$16 RETURNING id, case_manager_user_id
+        WHERE id=$18 RETURNING id, case_manager_user_id
       `, [body.caseId, body.travelerProfileId, selectedCase.case_manager_user_id,
         body.tripPurpose, body.outboundDate, body.returnDate, body.outboundAirport,
         body.returnAirport, body.destinationCity ?? null, body.destinationAddress ?? null,
         body.hotelProximityPreference ?? null, body.minimumHotelStarRating ?? null,
-        body.budgetFilter, body.companionTraveler ?? false, body.ipcmApprovalRequired ?? false, tripId]);
+        body.budgetFilter, body.companionTraveler ?? false, body.ipcmApprovalRequired ?? false,
+        body.returnDepartureAirport ?? null, body.returnArrivalAirport ?? null, tripId]);
       await client.query("COMMIT");
       return jsonResponse(200, { id: result.rows[0].id, ipcmUserId: result.rows[0].case_manager_user_id, message: "Trip updated." });
     } catch (error) { await client.query("ROLLBACK"); throw error; }
