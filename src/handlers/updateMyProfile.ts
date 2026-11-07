@@ -70,7 +70,7 @@ export async function handler(
         403,
         {
           message:
-            "Only IPCM users can update this profile."
+            "Only Case Manager users can update this profile."
         }
       );
     }

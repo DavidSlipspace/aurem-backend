@@ -132,7 +132,7 @@ export async function handler(
       500,
       {
         message:
-          "IPCM account creation is not configured."
+          "Case Manager account creation is not configured."
       }
     );
   }
@@ -399,7 +399,7 @@ export async function handler(
       !role
     ) {
       throw new Error(
-        "IPCM role is not configured."
+        "Case Manager role is not configured."
       );
     }
 
@@ -489,7 +489,7 @@ export async function handler(
       201,
       {
         message:
-          "Your Aurem IPCM account has been created."
+          "Your Aurem Case Manager account has been created."
       }
     );
   } catch (
@@ -528,7 +528,7 @@ export async function handler(
     }
 
     console.error(
-      "IPCM account creation failed",
+      "Case Manager account creation failed",
       error
     );
 
@@ -567,7 +567,7 @@ export async function handler(
       500,
       {
         message:
-          "Unable to create the IPCM account."
+          "Unable to create the Case Manager account."
       }
     );
   } finally {

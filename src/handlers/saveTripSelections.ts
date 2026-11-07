@@ -559,7 +559,7 @@ export async function handler(
     const nextTripStatus =
       booking
         .ipcm_approval_required
-        ? "Awaiting IPCM Approval"
+        ? "Awaiting Case Manager Approval"
         : "Booking In Progress";
 
     /*

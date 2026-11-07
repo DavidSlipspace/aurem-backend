@@ -75,7 +75,7 @@ export async function handler(
         403,
         {
           message:
-            "Only IPCM users can configure payment methods."
+            "Only Case Manager users can configure payment methods."
         }
       );
     }

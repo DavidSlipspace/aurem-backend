@@ -54,7 +54,7 @@ export async function handler(
         403,
         {
           message:
-            "Only the assigned IPCM can set the approved case budget."
+            "Only the assigned Case Manager can set the approved case budget."
         }
       );
     }

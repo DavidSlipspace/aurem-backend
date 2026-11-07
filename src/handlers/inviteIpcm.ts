@@ -174,7 +174,7 @@ function buildInvitationEmail(
 
     textBody:
       [
-        "You've been invited to create an IPCM account in Aurem.",
+        "You've been invited to create an Case Manager account in Aurem.",
         "",
         "Use the secure link below to complete your profile:",
         invitationUrl,
@@ -286,7 +286,7 @@ function buildInvitationEmail(
                               uppercase;
                           "
                         >
-                          IPCM Invitation
+                          Case Manager Invitation
                         </p>
 
                         <h1
@@ -319,7 +319,7 @@ function buildInvitationEmail(
                           An Aurem Administrator
                           has invited
                           <strong>${safeEmail}</strong>
-                          to create an IPCM account.
+                          to create an Case Manager account.
                         </p>
 
                         <p
@@ -433,7 +433,7 @@ export async function handler(
       400,
       {
         message:
-          "A valid IPCM email address is required."
+          "A valid Case Manager email address is required."
       }
     );
   }
@@ -451,7 +451,7 @@ export async function handler(
     !frontendBaseUrl
   ) {
     console.error(
-      "IPCM invitation configuration is incomplete.",
+      "Case Manager invitation configuration is incomplete.",
       {
         emailServiceConfigured:
           Boolean(
@@ -469,7 +469,7 @@ export async function handler(
       500,
       {
         message:
-          "IPCM invitations have not been configured."
+          "Case Manager invitations have not been configured."
       }
     );
   }
@@ -553,7 +553,7 @@ export async function handler(
     );
 
     console.log(
-      "IPCM invitation sent",
+      "Case Manager invitation sent",
       {
         invitationId:
           invitation.invitationId,
@@ -570,7 +570,7 @@ export async function handler(
       201,
       {
         message:
-          "IPCM invitation sent successfully.",
+          "Case Manager invitation sent successfully.",
 
         invitation: {
           id:
@@ -618,7 +618,7 @@ export async function handler(
         revokeError
       ) {
         console.error(
-          "Unable to revoke failed IPCM invitation",
+          "Unable to revoke failed Case Manager invitation",
           revokeError
         );
       }
@@ -647,7 +647,7 @@ export async function handler(
       500,
       {
         message:
-          "Unable to send the IPCM invitation."
+          "Unable to send the Case Manager invitation."
       }
     );
   }

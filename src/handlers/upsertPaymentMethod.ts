@@ -173,7 +173,7 @@ export async function handler(
         403,
         {
           message:
-            "Only IPCM users can manage their payment profile."
+            "Only Case Manager users can manage their payment profile."
         }
       );
     }
