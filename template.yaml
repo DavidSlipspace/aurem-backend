@@ -42,6 +42,7 @@ Parameters:
 
   SesSourceEmail:
     Type: String
+    Default: no-reply@orvotravel.com
     Description: >
       Exact email address verified as an Amazon SES identity in the
       deployment region.
@@ -327,7 +328,7 @@ Resources:
 
       EmailConfiguration:
         EmailSendingAccount: DEVELOPER
-        SourceArn: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSourceEmail}
+        SourceArn: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/orvotravel.com
         From: !Ref SesSourceEmail
 
       LambdaConfig:
