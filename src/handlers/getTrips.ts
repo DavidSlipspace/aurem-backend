@@ -71,7 +71,7 @@ type TripRow = {
     | string
     | null;
 
-  destination_address:
+  clinic_zip_code:
     | string
     | null;
 
@@ -84,7 +84,8 @@ type TripRow = {
     | null;
 
   budget_filter:
-    number;
+    number | null;
+  budget_is_manual: boolean;
 
   companion_traveler:
     boolean;
@@ -256,13 +257,14 @@ export async function handler(
 
             t.destination_city,
 
-            t.destination_address,
+            t.clinic_zip_code,
 
             t.hotel_proximity_preference,
 
             t.minimum_hotel_star_rating,
 
             t.budget_filter,
+            t.budget_is_manual,
 
             t.companion_traveler,
 
@@ -451,8 +453,8 @@ export async function handler(
               destinationCity:
                 row.destination_city,
 
-              destinationAddress:
-                row.destination_address,
+              clinicZipCode:
+                row.clinic_zip_code,
 
               hotelProximityPreference:
                 row.hotel_proximity_preference,
@@ -462,8 +464,10 @@ export async function handler(
 
               budgetFilter:
                 Number(
-                  row.budget_filter
+                  row.budget_filter ?? 0
                 ),
+
+              budgetIsManual: row.budget_is_manual,
 
               companionTraveler:
                 row.companion_traveler,
