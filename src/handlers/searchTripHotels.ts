@@ -44,7 +44,7 @@ type TripHotelSearchRow = {
     | string
     | null;
 
-  destination_address:
+  clinic_zip_code:
     | string
     | null;
 
@@ -245,47 +245,11 @@ function formatDateForMessage(
   ).format(date);
 }
 
-function buildDestination(
-  row: TripHotelSearchRow
-): string | null {
-  const address =
-    row
-      .destination_address
-      ?.trim();
-
-  const city =
-    row
-      .destination_city
-      ?.trim();
-
-  if (
-    address &&
-    city
-  ) {
-    const lowerAddress =
-      address
-        .toLowerCase();
-
-    const lowerCity =
-      city
-        .toLowerCase();
-
-    return lowerAddress.includes(
-      lowerCity
-    )
-      ? address
-      : `${address}, ${city}`;
-  }
-
-  if (address) {
-    return address;
-  }
-
-  if (city) {
-    return city;
-  }
-
-  return null;
+function buildDestination(row: TripHotelSearchRow): string | null {
+  const zip = row.clinic_zip_code?.trim();
+  const city = row.destination_city?.trim();
+  // US ZIP is an approximate geographic search center, never a clinic address.
+  return zip ? (city ? `${zip}, ${city}, USA` : `${zip}, USA`) : (city ? `${city}, USA` : null);
 }
 
 function getRadiusKilometers(
@@ -558,7 +522,7 @@ function providerErrorResponse(
       "DESTINATION_NOT_FOUND",
       "We couldn't identify the hotel destination",
       message ||
-        "The destination on this trip could not be located. Please contact your case manager to confirm the destination city or address.",
+        "The destination on this trip could not be located. Please contact your case manager to confirm the destination city or clinic ZIP code.",
       false
     );
   }
@@ -731,7 +695,7 @@ export async function handler(
               t.return_date,
 
               t.destination_city,
-              t.destination_address,
+              t.clinic_zip_code,
 
               t.hotel_proximity_preference,
               t.minimum_hotel_star_rating,
@@ -788,7 +752,7 @@ export async function handler(
         400,
         "DESTINATION_MISSING",
         "Destination information is missing",
-        "This trip does not have a destination city or address configured. Please contact your case manager to update the trip.",
+        "This trip does not have a destination city or clinic ZIP code configured. Please contact your case manager to update the trip.",
         false
       );
     }
