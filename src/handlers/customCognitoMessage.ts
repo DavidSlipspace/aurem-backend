@@ -92,13 +92,17 @@ export async function handler(
     `
       <!DOCTYPE html>
       <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        </head>
         <body
           style="
             margin: 0;
             padding: 0;
-            background: #f8fafc;
+            background: #f4f7fb;
             font-family: Arial, Helvetica, sans-serif;
-            color: #101828;
+            color: #172b46;
           "
         >
           <table
@@ -109,7 +113,7 @@ export async function handler(
             border="0"
             style="
               width: 100%;
-              background: #f8fafc;
+              background: #f4f7fb;
               padding: 32px 16px;
             "
           >
@@ -124,7 +128,7 @@ export async function handler(
                   style="
                     max-width: 600px;
                     background: #ffffff;
-                    border: 1px solid #e4e7ec;
+                    border: 1px solid #dce4ee;
                     border-radius: 16px;
                   "
                 >
@@ -132,10 +136,13 @@ export async function handler(
                     <td
                       style="
                         padding: 24px 32px;
-                        background: #111827;
+                        background: #13294B;
                         color: #ffffff;
-                        font-size: 20px;
+                        font-size: 30px;
                         font-weight: 700;
+                        letter-spacing: -0.03em;
+                        border-bottom: 4px solid #5B8FD9;
+                        border-radius: 15px 15px 0 0;
                       "
                     >
                       Orvo
@@ -151,7 +158,7 @@ export async function handler(
                       <p
                         style="
                           margin: 0 0 10px;
-                          color: #667085;
+                          color: #62748a;
                           font-size: 12px;
                           font-weight: 700;
                           letter-spacing: 0.08em;
@@ -164,7 +171,7 @@ export async function handler(
                       <h1
                         style="
                           margin: 0 0 16px;
-                          color: #101828;
+                          color: #172b46;
                           font-size: 28px;
                           line-height: 1.2;
                         "
@@ -175,7 +182,7 @@ export async function handler(
                       <p
                         style="
                           margin: 0 0 26px;
-                          color: #475467;
+                          color: #172b46;
                           font-size: 16px;
                           line-height: 1.6;
                         "
@@ -190,28 +197,28 @@ export async function handler(
                         href="${safeUrl}"
                         style="
                           display: inline-block;
-                          padding: 12px 20px;
+                          padding: 14px 24px;
                           border-radius: 8px;
-                          background: #111827;
+                          background: #13294B;
                           color: #ffffff;
                           font-size: 15px;
                           font-weight: 700;
                           text-decoration: none;
                         "
                       >
-                        Reset Password
+                        Reset password
                       </a>
 
                       <p
                         style="
                           margin: 26px 0 0;
-                          color: #667085;
+                          color: #62748a;
                           font-size: 13px;
                           line-height: 1.5;
                         "
                       >
                         If you did not request a password
-                        reset, you can ignore this email.
+                        reset, you can ignore this email. Your password will remain unchanged.
                       </p>
                     </td>
                   </tr>

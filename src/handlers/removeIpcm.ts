@@ -62,7 +62,7 @@ export async function handler(
       403,
       {
         message:
-          "Only Administrators can remove IPCMs."
+          "Only Administrators can remove Case Managers."
       }
     );
   }

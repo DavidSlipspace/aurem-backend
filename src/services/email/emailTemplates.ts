@@ -1,3 +1,5 @@
+import { emailLayout, emailParagraph, emailButton, emailDetail, escapeHtml } from "./emailLayout";
+
 import type {
   TransactionalEmailRequest
 } from "./emailService";
@@ -19,32 +21,6 @@ type CaseAssignmentEmailInput = {
   frontendBaseUrl:
     string;
 };
-
-function escapeHtml(
-  value: string
-): string {
-  return value
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
-}
 
 function formatCurrency(
   cents:
@@ -119,105 +95,15 @@ export function buildCaseAssignmentEmail(
       "\n"
     );
 
-  const htmlBody =
-    `
-      <div
-        style="
-          font-family:
-            Arial,
-            Helvetica,
-            sans-serif;
-          color: #101828;
-          line-height: 1.6;
-        "
-      >
-        <p>
-          Hello ${escapeHtml(
-            input.recipientFirstName
-          )},
-        </p>
-
-        <p>
-          A new case has been
-          assigned to you in
-          Orvo.
-        </p>
-
-        <div
-          style="
-            padding: 16px;
-            margin: 20px 0;
-            border: 1px solid #e4e7ec;
-            border-radius: 10px;
-            background: #f8fafc;
-          "
-        >
-          <strong>
-            Case
-          </strong>
-
-          <div>
-            ${escapeHtml(
-              input.caseReferenceId
-            )}
-          </div>
-
-          <div
-            style="
-              margin-top: 8px;
-              color: #475467;
-            "
-          >
-            ${escapeHtml(
-              suggestedBudgetText
-            )}
-          </div>
-        </div>
-
-        <p>
-          Please sign in to Orvo
-          to review the case and
-          set the approved case
-          budget.
-        </p>
-
-        <p>
-          <a
-            href="${escapeHtml(
-              portalUrl
-            )}"
-            style="
-              display:
-                inline-block;
-              padding:
-                11px 16px;
-              border-radius:
-                8px;
-              background:
-                #111827;
-              color:
-                #ffffff;
-              text-decoration:
-                none;
-              font-weight:
-                700;
-            "
-          >
-            Open Orvo
-          </a>
-        </p>
-
-        <p
-          style="
-            margin-top: 28px;
-            color: #667085;
-            font-size: 13px;
-          "
-        >
-          Orvo
-        </p>
-      </div>
-    `;
+  const htmlBody = emailLayout({
+    category: "Case assignment",
+    title: "New case assigned",
+    bodyHtml: emailParagraph(`Hello ${escapeHtml(input.recipientFirstName)},`) +
+      emailParagraph("A new case has been assigned to you in Orvo.") +
+      emailDetail("Case", input.caseReferenceId, suggestedBudgetText) +
+      emailParagraph("Please sign in to Orvo to review the case and set the approved case budget.") +
+      emailButton("Open Orvo", portalUrl)
+  });
 
   return {
     to:
