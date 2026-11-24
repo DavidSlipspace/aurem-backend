@@ -193,7 +193,7 @@ async function getIpcmUser(
         u.status = 'active'
 
         AND
-        r.name = 'ipcm'
+        r.name IN ('ipcm', 'case_manager')
 
       LIMIT 1;
       `,
@@ -381,8 +381,7 @@ export async function getCaseFormOptions(
             'active'
 
           AND
-          r.name =
-            'ipcm'
+          r.name IN ('ipcm', 'case_manager')
 
         ORDER BY
           u.last_name,
@@ -648,7 +647,8 @@ export async function updateCaseRecord(
   companyId: string,
   caseId: string,
   input:
-    CaseMutationInput
+    CaseMutationInput,
+  actingCaseManagerId?: string
 ): Promise<CaseMutationResult> {
   const pool =
     getPool();
@@ -694,6 +694,16 @@ export async function updateCaseRecord(
       throw new CaseServiceError(
         "NOT_FOUND",
         "Case not found."
+      );
+    }
+
+    if (actingCaseManagerId && (
+      existing.case_manager_user_id !== actingCaseManagerId ||
+      input.ipcmUserId !== actingCaseManagerId
+    )) {
+      throw new CaseServiceError(
+        "FORBIDDEN",
+        "You may only update cases assigned to yourself and cannot reassign them."
       );
     }
 
