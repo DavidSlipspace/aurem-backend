@@ -1,3 +1,5 @@
+import { emailLayout, emailParagraph, emailButton, escapeHtml } from "../services/email/emailLayout";
+
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult
@@ -46,32 +48,6 @@ function isValidEmail(
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     email
   );
-}
-
-function escapeHtml(
-  value: string
-): string {
-  return value
-    .replaceAll(
-      "&",
-      "&amp;"
-    )
-    .replaceAll(
-      "<",
-      "&lt;"
-    )
-    .replaceAll(
-      ">",
-      "&gt;"
-    )
-    .replaceAll(
-      '"',
-      "&quot;"
-    )
-    .replaceAll(
-      "'",
-      "&#039;"
-    );
 }
 
 function parseBody(
@@ -155,16 +131,6 @@ function buildInvitationEmail(
   email: string,
   invitationUrl: string
 ): SendEmailRequest {
-  const safeEmail =
-    escapeHtml(
-      email
-    );
-
-  const safeUrl =
-    escapeHtml(
-      invitationUrl
-    );
-
   return {
     to:
       email,
@@ -174,7 +140,7 @@ function buildInvitationEmail(
 
     textBody:
       [
-        "You've been invited to create an Case Manager account in Orvo.",
+        "You've been invited to create a Case Manager account in Orvo.",
         "",
         "Use the secure link below to complete your profile:",
         invitationUrl,
@@ -186,209 +152,14 @@ function buildInvitationEmail(
         "\n"
       ),
 
-    htmlBody:
-      `
-        <!DOCTYPE html>
-        <html lang="en">
-          <head>
-            <meta charset="UTF-8" />
-
-            <meta
-              name="viewport"
-              content="width=device-width, initial-scale=1.0"
-            />
-
-            <title>
-              Orvo Invitation
-            </title>
-          </head>
-
-          <body
-            style="
-              margin: 0;
-              padding: 0;
-              background: #f8fafc;
-              font-family:
-                Arial,
-                Helvetica,
-                sans-serif;
-              color: #101828;
-            "
-          >
-            <table
-              role="presentation"
-              width="100%"
-              cellspacing="0"
-              cellpadding="0"
-              border="0"
-              style="
-                width: 100%;
-                background: #f8fafc;
-                padding: 32px 16px;
-              "
-            >
-              <tr>
-                <td align="center">
-                  <table
-                    role="presentation"
-                    width="100%"
-                    cellspacing="0"
-                    cellpadding="0"
-                    border="0"
-                    style="
-                      max-width: 600px;
-                      background: #ffffff;
-                      border:
-                        1px solid #e4e7ec;
-                      border-radius: 16px;
-                      overflow: hidden;
-                    "
-                  >
-                    <tr>
-                      <td
-                        style="
-                          padding:
-                            24px 32px;
-                          background:
-                            #111827;
-                          color:
-                            #ffffff;
-                          font-size:
-                            20px;
-                          font-weight:
-                            700;
-                        "
-                      >
-                        Orvo
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td
-                        style="
-                          padding:
-                            36px 32px;
-                        "
-                      >
-                        <p
-                          style="
-                            margin:
-                              0 0 10px;
-                            color:
-                              #667085;
-                            font-size:
-                              12px;
-                            font-weight:
-                              700;
-                            letter-spacing:
-                              0.08em;
-                            text-transform:
-                              uppercase;
-                          "
-                        >
-                          Case Manager Invitation
-                        </p>
-
-                        <h1
-                          style="
-                            margin:
-                              0 0 16px;
-                            color:
-                              #101828;
-                            font-size:
-                              28px;
-                            line-height:
-                              1.2;
-                          "
-                        >
-                          You've been invited to Orvo
-                        </h1>
-
-                        <p
-                          style="
-                            margin:
-                              0 0 16px;
-                            color:
-                              #475467;
-                            font-size:
-                              16px;
-                            line-height:
-                              1.6;
-                          "
-                        >
-                          An Orvo Administrator
-                          has invited
-                          <strong>${safeEmail}</strong>
-                          to create an Case Manager account.
-                        </p>
-
-                        <p
-                          style="
-                            margin:
-                              0 0 26px;
-                            color:
-                              #475467;
-                            font-size:
-                              16px;
-                            line-height:
-                              1.6;
-                          "
-                        >
-                          Use the secure link below
-                          to complete your profile
-                          and create your account.
-                        </p>
-
-                        <a
-                          href="${safeUrl}"
-                          style="
-                            display:
-                              inline-block;
-                            padding:
-                              12px 20px;
-                            border-radius:
-                              8px;
-                            background:
-                              #111827;
-                            color:
-                              #ffffff;
-                            font-size:
-                              15px;
-                            font-weight:
-                              700;
-                            text-decoration:
-                              none;
-                          "
-                        >
-                          Create Orvo Account
-                        </a>
-
-                        <p
-                          style="
-                            margin:
-                              26px 0 0;
-                            color:
-                              #667085;
-                            font-size:
-                              13px;
-                            line-height:
-                              1.5;
-                          "
-                        >
-                          This invitation expires
-                          in 7 days. If you were
-                          not expecting this email,
-                          no action is required.
-                        </p>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </body>
-        </html>
-      `.trim()
+    htmlBody: emailLayout({
+      category: "Case Manager invitation",
+      title: "You've been invited to Orvo",
+      bodyHtml: emailParagraph(`An Orvo Administrator has invited <strong>${escapeHtml(email)}</strong> to create a Case Manager account.`) +
+        emailParagraph("Use the secure link below to complete your profile and create your account.") +
+        emailButton("Create Orvo Account", invitationUrl),
+      notice: "This invitation expires in 7 days. If you were not expecting this email, no action is required."
+    })
   };
 }
 
@@ -418,7 +189,7 @@ export async function handler(
       403,
       {
         message:
-          "Only Administrators can invite IPCMs."
+          "Only Administrators can invite Case Managers."
       }
     );
   }
