@@ -176,8 +176,7 @@ export async function getCompanyIpcmDirectory(
                 'active'
 
             AND
-              r.name =
-                'ipcm'
+              r.name IN ('ipcm','case_manager')
 
           GROUP BY
             u.id,

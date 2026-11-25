@@ -149,16 +149,9 @@ export async function handler(
     }
 
     if (
-      candidate.caseCount >
-        0 ||
       candidate.tripCount >
         0
     ) {
-      const caseText =
-        candidate.caseCount ===
-        1
-          ? "1 case"
-          : `${candidate.caseCount} cases`;
 
       const tripText =
         candidate.tripCount ===
@@ -170,7 +163,7 @@ export async function handler(
         409,
         {
           message:
-            `This Case Manager cannot be removed because they are still assigned to ${caseText} and ${tripText}. Reassign those records first.`
+            `This Case Manager cannot be removed because they are still assigned to ${tripText}. Reassign those records first.`
         }
       );
     }

@@ -21,10 +21,10 @@ type TripRow = {
   trip_reference_id:
     string;
 
-  case_id: string;
+  traveler_ids: string[];
+  traveler_names: string[];
 
-  case_reference_id:
-    string;
+
 
   traveler_profile_id:
     string;
@@ -85,7 +85,7 @@ type TripRow = {
 
   budget_filter:
     number | null;
-  budget_is_manual: boolean;
+
 
   companion_traveler:
     boolean;
@@ -205,7 +205,7 @@ export async function handler(
     if (!["admin", "case_manager"].includes(currentUser.roleName)) {
       return jsonResponse(403, { message: "User role is not authorized to view trips." });
     }
-    const whereClause = "c.company_id = $1 AND ($2 = 'admin' OR c.case_manager_user_id = $3)";
+    const whereClause = "t.company_id = $1 AND ($2 = 'admin' OR t.case_manager_user_id = $3)";
     const params: string[] = [currentUser.companyId, currentUser.roleName, currentUser.id];
 
     const result =
@@ -218,9 +218,9 @@ export async function handler(
             t.id,
             t.trip_reference_id,
 
-            t.case_id,
+            ARRAY(SELECT tt.traveler_profile_id FROM trip_travelers tt WHERE tt.trip_id=t.id ORDER BY (tt.traveler_profile_id=t.traveler_profile_id) DESC, tt.created_at, tt.traveler_profile_id) AS traveler_ids,
 
-            c.case_reference_id,
+            ARRAY(SELECT concat_ws(' ', p.legal_first_name,p.legal_last_name) FROM trip_travelers tt JOIN traveler_profiles p ON p.id=tt.traveler_profile_id WHERE tt.trip_id=t.id ORDER BY (tt.traveler_profile_id=t.traveler_profile_id) DESC,tt.created_at,tt.traveler_profile_id) AS traveler_names,
 
             t.traveler_profile_id,
 
@@ -264,7 +264,7 @@ export async function handler(
             t.minimum_hotel_star_rating,
 
             t.budget_filter,
-            t.budget_is_manual,
+            
 
             t.companion_traveler,
 
@@ -348,10 +348,6 @@ export async function handler(
 
           FROM trips t
 
-          JOIN cases c
-            ON c.id =
-              t.case_id
-
           JOIN traveler_profiles tp
             ON tp.id =
               t.traveler_profile_id
@@ -408,11 +404,9 @@ export async function handler(
               tripReferenceId:
                 row.trip_reference_id,
 
-              caseId:
-                row.case_id,
+              travelerProfileIds: row.traveler_ids,
 
-              caseReferenceId:
-                row.case_reference_id,
+              travelerNames: row.traveler_names,
 
               travelerProfileId:
                 row.traveler_profile_id,
@@ -467,7 +461,7 @@ export async function handler(
                   row.budget_filter ?? 0
                 ),
 
-              budgetIsManual: row.budget_is_manual,
+              
 
               companionTraveler:
                 row.companion_traveler,

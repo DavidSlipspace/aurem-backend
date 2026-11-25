@@ -6,7 +6,7 @@ type IpcmRemovalRow = {
   id: string;
   email: string;
 
-  case_count: number;
+
   trip_count: number;
 };
 
@@ -14,7 +14,7 @@ export type IpcmRemovalCandidate = {
   id: string;
   email: string;
 
-  caseCount: number;
+
   tripCount: number;
 };
 
@@ -30,16 +30,7 @@ export async function getIpcmRemovalCandidate(
             u.id,
             u.email,
 
-            (
-              SELECT
-                COUNT(*)::int
 
-              FROM cases c
-
-              WHERE
-                c.case_manager_user_id =
-                  u.id
-            ) AS case_count,
 
             (
               SELECT
@@ -73,8 +64,7 @@ export async function getIpcmRemovalCandidate(
                 'active'
 
             AND
-              r.name =
-                'ipcm'
+              r.name IN ('ipcm','case_manager')
 
           LIMIT 1;
         `,
@@ -98,10 +88,7 @@ export async function getIpcmRemovalCandidate(
     email:
       row.email,
 
-    caseCount:
-      Number(
-        row.case_count
-      ),
+
 
     tripCount:
       Number(

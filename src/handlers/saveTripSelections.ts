@@ -50,6 +50,7 @@ type BookingLinkTripRow = {
   return_arrival_airport: string | null;
 
   ipcm_approval_required: boolean;
+  budget_filter: number | null;
 };
 
 function hashToken(
@@ -388,7 +389,7 @@ export async function handler(
                t.return_departure_airport,
                t.return_arrival_airport,
 
-              t.ipcm_approval_required
+              t.ipcm_approval_required, t.budget_filter
 
             FROM booking_links bl
 
@@ -409,7 +410,7 @@ export async function handler(
 
             LIMIT 1
 
-            FOR UPDATE OF bl;
+            FOR UPDATE OF bl, t;
           `,
           [
             tokenHash
@@ -546,6 +547,13 @@ export async function handler(
       );
     }
 
+    const budget = Number(booking.budget_filter);
+    const flightCost = request.flight.totalAmountCents;
+    const hotelCost = request.hotel.cheapestTotalAmountCents;
+    if (!Number.isSafeInteger(budget) || budget <= 0 || !Number.isSafeInteger(flightCost) || !Number.isSafeInteger(hotelCost) || flightCost <= 0 || hotelCost <= 0 || flightCost > Math.floor(budget * 2 / 3) || hotelCost > Math.floor(budget / 3) || flightCost + hotelCost > budget) {
+      await client.query("ROLLBACK");
+      return errorResponse(400,"TRIP_BUDGET_EXCEEDED","Selections exceed the trip budget","Choose flights and hotels within the shared trip budget.");
+    }
     const approvalStatus =
       booking
         .ipcm_approval_required
