@@ -1,3 +1,4 @@
+import { sendTransactionalEmail } from "../services/email/emailService";
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult
@@ -50,6 +51,8 @@ type BookingLinkTripRow = {
   return_arrival_airport: string | null;
 
   ipcm_approval_required: boolean;
+  budget_filter: number | null;
+  approver_email: string | null;
 };
 
 function hashToken(
@@ -388,7 +391,7 @@ export async function handler(
                t.return_departure_airport,
                t.return_arrival_airport,
 
-              t.ipcm_approval_required
+              t.ipcm_approval_required, t.budget_filter, approver.email AS approver_email
 
             FROM booking_links bl
 
@@ -396,6 +399,7 @@ export async function handler(
               ON t.id =
                 bl.trip_id
 
+            LEFT JOIN users approver ON approver.id=t.approving_case_manager_user_id AND approver.company_id=t.company_id AND approver.status='active'
             WHERE
               bl.token_hash = $1
 
@@ -409,7 +413,7 @@ export async function handler(
 
             LIMIT 1
 
-            FOR UPDATE OF bl;
+            FOR UPDATE OF bl, t;
           `,
           [
             tokenHash
@@ -546,6 +550,17 @@ export async function handler(
       );
     }
 
+    const budget = Number(booking.budget_filter);
+    const flightCost = request.flight.totalAmountCents;
+    const hotelCost = request.hotel.cheapestTotalAmountCents;
+    if (!Number.isSafeInteger(budget) || budget <= 0 || !Number.isSafeInteger(flightCost) || !Number.isSafeInteger(hotelCost) || flightCost <= 0 || hotelCost <= 0 || flightCost > Math.floor(budget * 2 / 3) || hotelCost > Math.floor(budget / 3) || flightCost + hotelCost > budget) {
+      await client.query("ROLLBACK");
+      return errorResponse(400,"TRIP_BUDGET_EXCEEDED","Selections exceed the trip budget","Choose flights and hotels within the shared trip budget.");
+    }
+    if (booking.ipcm_approval_required && !booking.approver_email) {
+      await client.query("ROLLBACK");
+      return errorResponse(409,"APPROVER_UNAVAILABLE","Approver unavailable","Contact your Case Manager before submitting selections.");
+    }
     const approvalStatus =
       booking
         .ipcm_approval_required
@@ -1012,6 +1027,9 @@ export async function handler(
       "COMMIT"
     );
 
+    if (booking.ipcm_approval_required && booking.approver_email) {
+      try { await sendTransactionalEmail({to: booking.approver_email, subject: `Orvo: approval requested for ${booking.trip_reference_id}`, textBody: `Travel selections for ${booking.trip_reference_id} are awaiting your approval. Sign in to Orvo to review the trip.`}); } catch (error) { console.error("Approval notification failed", error); }
+    }
     return jsonResponse(
       200,
       {

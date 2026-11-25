@@ -155,7 +155,7 @@ export async function handler(
             u.id = $1
 
             AND
-            r.name = 'ipcm'
+            r.name IN ('ipcm','case_manager')
 
           LIMIT 1;
           `,
@@ -170,6 +170,7 @@ export async function handler(
     return jsonResponse(
       200,
       {
+        id: currentUser.id,
         email:
           user.email,
 

@@ -59,6 +59,7 @@ type TripHotelSearchRow = {
   budget_filter: number;
 
   companion_traveler: boolean;
+  traveler_count: number;
 };
 
 type ProviderErrorPayload = {
@@ -701,7 +702,8 @@ export async function handler(
               t.minimum_hotel_star_rating,
 
               t.budget_filter,
-              t.companion_traveler
+              t.companion_traveler,
+              (SELECT count(*)::int FROM trip_travelers tt WHERE tt.trip_id=t.id) AS traveler_count
 
             FROM booking_links bl
 
@@ -874,10 +876,7 @@ export async function handler(
       checkOutDate,
 
       adultGuests:
-        trip
-          .companion_traveler
-          ? 2
-          : 1,
+        Math.max(trip.traveler_count, trip.companion_traveler ? 2 : 1),
 
       rooms: 1,
 

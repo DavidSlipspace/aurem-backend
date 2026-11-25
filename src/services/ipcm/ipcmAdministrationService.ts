@@ -6,7 +6,7 @@ type IpcmRemovalRow = {
   id: string;
   email: string;
 
-  case_count: number;
+
   trip_count: number;
 };
 
@@ -14,7 +14,7 @@ export type IpcmRemovalCandidate = {
   id: string;
   email: string;
 
-  caseCount: number;
+
   tripCount: number;
 };
 
@@ -30,16 +30,7 @@ export async function getIpcmRemovalCandidate(
             u.id,
             u.email,
 
-            (
-              SELECT
-                COUNT(*)::int
 
-              FROM cases c
-
-              WHERE
-                c.case_manager_user_id =
-                  u.id
-            ) AS case_count,
 
             (
               SELECT
@@ -48,8 +39,7 @@ export async function getIpcmRemovalCandidate(
               FROM trips t
 
               WHERE
-                t.case_manager_user_id =
-                  u.id
+                (t.case_manager_user_id = u.id OR t.approving_case_manager_user_id = u.id)
             ) AS trip_count
 
           FROM users u
@@ -73,8 +63,7 @@ export async function getIpcmRemovalCandidate(
                 'active'
 
             AND
-              r.name =
-                'ipcm'
+              r.name IN ('ipcm','case_manager')
 
           LIMIT 1;
         `,
@@ -98,10 +87,7 @@ export async function getIpcmRemovalCandidate(
     email:
       row.email,
 
-    caseCount:
-      Number(
-        row.case_count
-      ),
+
 
     tripCount:
       Number(
@@ -125,6 +111,9 @@ export async function deactivateIpcmUser(
       "BEGIN"
     );
 
+    await client.query(`SELECT id FROM users WHERE id=$1 AND company_id=$2 FOR UPDATE`, [userId,companyId]);
+    const assigned = await client.query(`SELECT 1 FROM trips WHERE case_manager_user_id=$1 OR approving_case_manager_user_id=$1 LIMIT 1`,[userId]);
+    if (assigned.rowCount) { await client.query("ROLLBACK"); return false; }
     await client.query(
       `
         UPDATE ipcm_payment_methods

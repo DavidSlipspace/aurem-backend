@@ -55,13 +55,7 @@ type TripEmailRow = {
   budget_filter:
     number;
 
-  approved_budget_cents:
-    | number
-    | null;
 
-  allocated_budget_cents:
-    | number
-    | string;
 };
 
 const BOOKING_LINK_EXPIRATION_DAYS =
@@ -352,17 +346,17 @@ export async function handler(
       "admin"
     ) {
       accessClause =
-        "c.company_id = $2";
+        "t.company_id = $2";
 
       params.push(
         currentUser.companyId
       );
     } else {
       accessClause =
-        "c.case_manager_user_id = $2";
+        "t.case_manager_user_id = $2 AND t.company_id = $3";
 
       params.push(
-        currentUser.id
+        currentUser.id, currentUser.companyId
       );
     }
 
@@ -387,35 +381,8 @@ export async function handler(
           tp.email
             AS traveler_email,
 
-          t.budget_filter,
-
-          c.approved_budget_cents,
-
-          COALESCE(
-            (
-              SELECT
-                SUM(
-                  COALESCE(
-                    case_trip.budget_filter,
-                    0
-                  )
-                )
-
-              FROM trips case_trip
-
-              WHERE
-                case_trip.case_id =
-                  c.id
-            ),
-            0
-          )
-            AS allocated_budget_cents
-
+          t.budget_filter
         FROM trips t
-
-        JOIN cases c
-          ON c.id =
-            t.case_id
 
         JOIN traveler_profiles tp
           ON tp.id =
@@ -452,19 +419,6 @@ export async function handler(
         trip.budget_filter
       );
 
-    const caseBudgetCents =
-      trip.approved_budget_cents ===
-        null
-        ? null
-        : Number(
-            trip.approved_budget_cents
-          );
-
-    const allocatedBudgetCents =
-      Number(
-        trip.allocated_budget_cents
-      );
-
     if (
       !Number.isFinite(
         tripBudgetCents
@@ -477,81 +431,6 @@ export async function handler(
         {
           message:
             "A trip budget must be set before this trip can be sent to the traveler."
-        }
-      );
-    }
-
-    if (
-      caseBudgetCents ===
-        null ||
-      !Number.isFinite(
-        caseBudgetCents
-      ) ||
-      caseBudgetCents <=
-        0
-    ) {
-      return jsonResponse(
-        400,
-        {
-          message:
-            "The Case Manager must set an approved case budget before this trip can be sent to the traveler."
-        }
-      );
-    }
-
-    if (
-      !Number.isFinite(
-        allocatedBudgetCents
-      )
-    ) {
-      return jsonResponse(
-        500,
-        {
-          message:
-            "Unable to validate the case budget allocation."
-        }
-      );
-    }
-
-    if (
-      allocatedBudgetCents >
-      caseBudgetCents
-    ) {
-      const formattedCaseBudget =
-        new Intl.NumberFormat(
-          "en-US",
-          {
-            style:
-              "currency",
-
-            currency:
-              "USD"
-          }
-        ).format(
-          caseBudgetCents /
-            100
-        );
-
-      const formattedAllocatedBudget =
-        new Intl.NumberFormat(
-          "en-US",
-          {
-            style:
-              "currency",
-
-            currency:
-              "USD"
-          }
-        ).format(
-          allocatedBudgetCents /
-            100
-        );
-
-      return jsonResponse(
-        400,
-        {
-          message:
-            `The trip cannot be sent because ${formattedAllocatedBudget} is currently allocated across trips for this case, which exceeds the approved case budget of ${formattedCaseBudget}. Update the trip budgets before sending the traveler email.`
         }
       );
     }
