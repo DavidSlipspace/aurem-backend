@@ -24,13 +24,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         trip_reference_id, company_id, traveler_profile_id, case_manager_user_id, trip_purpose, status,
         outbound_date, return_date, outbound_airport, return_airport, return_departure_airport,
         return_arrival_airport, destination_city, clinic_zip_code, hotel_proximity_preference,
-        minimum_hotel_star_rating, budget_filter, companion_traveler, ipcm_approval_required
-      ) VALUES ($1,$2,$3,$4,$5,'Created',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+        minimum_hotel_star_rating, budget_filter, companion_traveler, ipcm_approval_required, approving_case_manager_user_id
+      ) VALUES ($1,$2,$3,$4,$5,'Created',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [reference, user.companyId, body.travelerProfileId, manager,
         body.tripPurpose, body.outboundDate, body.returnDate, body.outboundAirport, body.returnAirport,
         body.returnDepartureAirport, body.returnArrivalAirport, body.destinationCity, body.clinicZipCode,
         body.hotelProximityPreference, body.minimumHotelStarRating, body.budgetFilter,
-        body.companionTraveler, body.ipcmApprovalRequired]
+        body.companionTraveler, body.ipcmApprovalRequired, body.approvingCaseManagerUserId]
     );
     await addTripTravelers(client, created.rows[0].id, body.travelerProfileIds);
     await client.query("COMMIT");

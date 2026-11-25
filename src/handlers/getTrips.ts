@@ -17,6 +17,8 @@ import {
 
 type TripRow = {
   id: string;
+  approving_case_manager_user_id: string | null;
+  approving_case_manager_name: string | null;
 
   trip_reference_id:
     string;
@@ -205,7 +207,7 @@ export async function handler(
     if (!["admin", "case_manager"].includes(currentUser.roleName)) {
       return jsonResponse(403, { message: "User role is not authorized to view trips." });
     }
-    const whereClause = "t.company_id = $1 AND ($2 = 'admin' OR t.case_manager_user_id = $3)";
+    const whereClause = "t.company_id = $1 AND ($2 = 'admin' OR t.case_manager_user_id = $3 OR t.approving_case_manager_user_id = $3)";
     const params: string[] = [currentUser.companyId, currentUser.roleName, currentUser.id];
 
     const result =
@@ -269,6 +271,8 @@ export async function handler(
             t.companion_traveler,
 
             t.ipcm_approval_required,
+            t.approving_case_manager_user_id,
+            CASE WHEN approver.id IS NOT NULL THEN concat_ws(' ',approver.first_name,approver.last_name) END AS approving_case_manager_name,
 
             outbound_flight.provider_offer_id
               AS selected_flight_offer_id,
@@ -356,6 +360,7 @@ export async function handler(
             ON ipcm.id =
               t.case_manager_user_id
 
+          LEFT JOIN users approver ON approver.id=t.approving_case_manager_user_id
           LEFT JOIN trip_flights
             outbound_flight
             ON
@@ -466,6 +471,8 @@ export async function handler(
               companionTraveler:
                 row.companion_traveler,
 
+              approvingCaseManagerUserId: row.approving_case_manager_user_id,
+              approvingCaseManagerName: row.approving_case_manager_name,
               ipcmApprovalRequired:
                 row.ipcm_approval_required,
 

@@ -39,8 +39,7 @@ export async function getIpcmRemovalCandidate(
               FROM trips t
 
               WHERE
-                t.case_manager_user_id =
-                  u.id
+                (t.case_manager_user_id = u.id OR t.approving_case_manager_user_id = u.id)
             ) AS trip_count
 
           FROM users u
@@ -112,6 +111,9 @@ export async function deactivateIpcmUser(
       "BEGIN"
     );
 
+    await client.query(`SELECT id FROM users WHERE id=$1 AND company_id=$2 FOR UPDATE`, [userId,companyId]);
+    const assigned = await client.query(`SELECT 1 FROM trips WHERE case_manager_user_id=$1 OR approving_case_manager_user_id=$1 LIMIT 1`,[userId]);
+    if (assigned.rowCount) { await client.query("ROLLBACK"); return false; }
     await client.query(
       `
         UPDATE ipcm_payment_methods

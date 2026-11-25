@@ -1501,6 +1501,7 @@ Resources:
 
   SaveTripSelectionsFunction:
     Type: AWS::Serverless::Function
+    DependsOn: LambdaVpcEndpoint
     Properties:
       FunctionName: aurem-dev-save-trip-selections
       CodeUri: .
@@ -1521,8 +1522,13 @@ Resources:
           DB_NAME: !Ref DbName
           DB_USER: !Ref DbUsername
           DB_PASSWORD: !Ref DbPassword
+          EMAIL_SERVICE_FUNCTION_NAME: !Ref EmailServiceFunction
       Policies:
         - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !GetAtt EmailServiceFunction.Arn
       Events:
         SaveTripSelectionsApi:
           Type: Api

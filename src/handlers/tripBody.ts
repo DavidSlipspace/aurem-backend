@@ -5,7 +5,7 @@ export type ParsedTripBody = {
   destinationCity: string | null; clinicZipCode: string | null;
   hotelProximityPreference: string | null; minimumHotelStarRating: number | null;
   budgetFilter: number | null;
-  companionTraveler: boolean; ipcmApprovalRequired: boolean;
+  companionTraveler: boolean; ipcmApprovalRequired: boolean; approvingCaseManagerUserId: string | null;
 };
 function string(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }
 function optionalString(value: unknown): string | null { return string(value) || null; }
@@ -40,7 +40,10 @@ export function parseTripBody(raw: string | null): ParsedTripBody {
   if (minimumHotelStarRating !== null && (!Number.isInteger(minimumHotelStarRating) || minimumHotelStarRating < 1 || minimumHotelStarRating > 5)) throw new Error("Hotel rating must be 1–5.");
   const budgetFilter = input.budgetFilter == null ? null : Number(input.budgetFilter);
   if (budgetFilter !== null && (!Number.isSafeInteger(budgetFilter) || budgetFilter < 0 || budgetFilter > 2147483647)) throw new Error("Trip budget must be non-negative whole cents.");
+  const approvingCaseManagerUserId = input.ipcmApprovalRequired === true ? string(input.approvingCaseManagerUserId) : null;
+  if (input.ipcmApprovalRequired === true && !uuid.test(approvingCaseManagerUserId || "")) throw new Error("Select one approving Case Manager.");
   return {
+    approvingCaseManagerUserId,
     ipcmUserId, travelerProfileIds, travelerProfileId, tripPurpose, outboundDate, returnDate,
     outboundAirport: airport(input.outboundAirport, true, "origin airport")!,
     returnAirport: airport(input.returnAirport, true, "destination airport")!,
